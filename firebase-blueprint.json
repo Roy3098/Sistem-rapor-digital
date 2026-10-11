@@ -1,0 +1,1245 @@
+{
+  "entities": {
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Administrator privilege record mapped by Firebase Auth UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the administrator.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "role": {
+          "type": "string",
+          "description": "Administrative role level.",
+          "enum": ["superadmin", "admin"],
+          "minLength": 5,
+          "maxLength": 20
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": ["uid", "role", "createdAt", "updatedAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Educator or staff account profile with isolated PII access.",
+      "type": "object",
+      "properties": {
+        "docId": {
+          "type": "string",
+          "description": "Document identifier.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the record owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "description": "Unique educator username.",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Full name and academic title of the educator.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the educator.",
+          "minLength": 0,
+          "maxLength": 120
+        },
+        "avatarUrl": {
+          "type": "string",
+          "description": "Avatar image URL or path.",
+          "minLength": 1,
+          "maxLength": 250000
+        },
+        "StaffRole": {
+          "type": "string",
+          "description": "Staff role designation.",
+          "enum": ["superadmin", "admin", "guru", "wali_kelas"],
+          "minLength": 4,
+          "maxLength": 20
+        },
+        "joinedDate": {
+          "type": "string",
+          "description": "Formatted date the educator joined.",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "docId",
+        "ownerId",
+        "username",
+        "fullName",
+        "email",
+        "avatarUrl",
+        "StaffRole",
+        "joinedDate",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SchoolConfig": {
+      "title": "SchoolConfig",
+      "description": "School identity, appearance, and active academic year configuration.",
+      "type": "object",
+      "properties": {
+        "docId": {
+          "type": "string",
+          "description": "Configuration document identifier.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "academicYear": {
+          "type": "string",
+          "description": "Active academic year string.",
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "appName": {
+          "type": "string",
+          "description": "Application display name.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "schoolName": {
+          "type": "string",
+          "description": "School or institution name.",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "subHeader": {
+          "type": "string",
+          "description": "Application subtitle.",
+          "minLength": 0,
+          "maxLength": 200
+        },
+        "announcement": {
+          "type": "string",
+          "description": "Announcement banner text.",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "enableTahfidz": {
+          "type": "boolean",
+          "description": "Whether Tahfidz module is enabled."
+        },
+        "enableBankSoal": {
+          "type": "boolean",
+          "description": "Whether Question Bank module is enabled."
+        },
+        "colorTheme": {
+          "type": "string",
+          "description": "Active color theme palette.",
+          "enum": ["emerald", "blue", "indigo", "teal", "amber", "rose", "slate", "violet", "cyan", "crimson", "custom"],
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "layout": {
+          "type": "string",
+          "description": "Workspace navigation layout.",
+          "enum": ["sidebar", "topbar"],
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "contentWidth": {
+          "type": "string",
+          "description": "Content container width mode.",
+          "enum": ["contained", "full"],
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "density": {
+          "type": "string",
+          "description": "Interface spacing density.",
+          "enum": ["comfortable", "compact"],
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "borderRadius": {
+          "type": "string",
+          "description": "Corner border radius style.",
+          "enum": ["sharp", "subtle", "modern", "rounded", "pill"],
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "showAnnouncement": {
+          "type": "boolean",
+          "description": "Whether to display the top announcement bar."
+        },
+        "accentSaturation": {
+          "type": "string",
+          "description": "Accent saturation mode.",
+          "enum": ["vibrant", "soft", "minimal"],
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "headerStyle": {
+          "type": "string",
+          "description": "Top navbar visual style.",
+          "enum": ["light", "colored", "dark", "brand", "glass"],
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "sidebarStyle": {
+          "type": "string",
+          "description": "Sidebar visual style.",
+          "enum": ["light", "colored", "dark", "brand"],
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "logoIconType": {
+          "type": "string",
+          "description": "Brand logo icon type.",
+          "enum": ["image", "mosque", "book", "shield", "star", "crescent", "graduation", "award", "school", "sparkles", "custom"],
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "customLogoUrl": {
+          "type": "string",
+          "description": "Custom logo URL.",
+          "minLength": 0,
+          "maxLength": 250000
+        },
+        "extendedConfigJson": {
+          "type": "string",
+          "description": "Serialized JSON of extended institution identity, custom color overrides, and report card theme configuration.",
+          "minLength": 0,
+          "maxLength": 500000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "docId",
+        "ownerId",
+        "academicYear",
+        "appName",
+        "schoolName",
+        "subHeader",
+        "announcement",
+        "enableTahfidz",
+        "enableBankSoal",
+        "colorTheme",
+        "layout",
+        "contentWidth",
+        "density",
+        "borderRadius",
+        "showAnnouncement",
+        "accentSaturation",
+        "headerStyle",
+        "sidebarStyle",
+        "logoIconType",
+        "customLogoUrl",
+        "extendedConfigJson",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ClassRoom": {
+      "title": "ClassRoom",
+      "description": "Academic class room and homeroom teacher assignment.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "number",
+          "description": "Numeric class ID."
+        },
+        "docId": {
+          "type": "string",
+          "description": "Firestore document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Class name.",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "teacher": {
+          "type": "string",
+          "description": "Homeroom teacher name.",
+          "minLength": 0,
+          "maxLength": 120
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": ["id", "docId", "ownerId", "name", "teacher", "createdAt", "updatedAt"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "Academic curriculum subject.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "number",
+          "description": "Numeric subject ID."
+        },
+        "docId": {
+          "type": "string",
+          "description": "Firestore document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Subject name.",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "category": {
+          "type": "string",
+          "description": "Curriculum category.",
+          "enum": ["Diniyah", "Umum", "Bahasa", "Keterampilan"],
+          "minLength": 4,
+          "maxLength": 30
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": ["id", "docId", "ownerId", "name", "category", "createdAt", "updatedAt"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Enrolled student (santri) record linked to a ClassRoom.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "number",
+          "description": "Numeric student ID."
+        },
+        "docId": {
+          "type": "string",
+          "description": "Firestore document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "nis": {
+          "type": "string",
+          "description": "Student identification number (NIS).",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the student.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "classId": {
+          "type": "number",
+          "description": "Numeric ID of the assigned class."
+        },
+        "classDocId": {
+          "type": "string",
+          "description": "Document ID of the parent ClassRoom.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "birthPlace": {
+          "type": "string",
+          "description": "Place of birth.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "birthDate": {
+          "type": "string",
+          "description": "Date of birth.",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "guardian": {
+          "type": "string",
+          "description": "Parent or guardian name.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "docId",
+        "ownerId",
+        "nis",
+        "name",
+        "classId",
+        "classDocId",
+        "birthPlace",
+        "birthDate",
+        "guardian",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Grade": {
+      "title": "Grade",
+      "description": "Academic subject grade for a student in a specific semester.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "number",
+          "description": "Numeric grade ID."
+        },
+        "docId": {
+          "type": "string",
+          "description": "Firestore document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "studentId": {
+          "type": "number",
+          "description": "Numeric student ID."
+        },
+        "studentDocId": {
+          "type": "string",
+          "description": "Document ID of the Student.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "subjectId": {
+          "type": "number",
+          "description": "Numeric subject ID."
+        },
+        "subjectDocId": {
+          "type": "string",
+          "description": "Document ID of the Subject.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "classId": {
+          "type": "number",
+          "description": "Numeric class ID."
+        },
+        "classDocId": {
+          "type": "string",
+          "description": "Document ID of the ClassRoom.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "semester": {
+          "type": "number",
+          "description": "Academic semester (1 or 2).",
+          "enum": [1, 2]
+        },
+        "score": {
+          "type": "number",
+          "description": "Academic score (0 to 100)."
+        },
+        "testDate": {
+          "type": "string",
+          "description": "Date of evaluation.",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "type": {
+          "type": "string",
+          "description": "Evaluation type.",
+          "enum": ["regular", "exam"],
+          "minLength": 4,
+          "maxLength": 20
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "docId",
+        "ownerId",
+        "studentId",
+        "studentDocId",
+        "subjectId",
+        "subjectDocId",
+        "classId",
+        "classDocId",
+        "semester",
+        "score",
+        "testDate",
+        "type",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "TahfidzGrade": {
+      "title": "TahfidzGrade",
+      "description": "Quran memorization and tajweed evaluation record.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "number",
+          "description": "Numeric tahfidz grade ID."
+        },
+        "docId": {
+          "type": "string",
+          "description": "Firestore document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "studentId": {
+          "type": "number",
+          "description": "Numeric student ID."
+        },
+        "studentDocId": {
+          "type": "string",
+          "description": "Document ID of the Student.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "classId": {
+          "type": "number",
+          "description": "Numeric class ID."
+        },
+        "classDocId": {
+          "type": "string",
+          "description": "Document ID of the ClassRoom.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "semester": {
+          "type": "number",
+          "description": "Semester number (1 or 2).",
+          "enum": [1, 2]
+        },
+        "tahfidzScore": {
+          "type": "number",
+          "description": "Memorization fluency score."
+        },
+        "tajweedScore": {
+          "type": "number",
+          "description": "Tajweed accuracy score."
+        },
+        "totalScore": {
+          "type": "number",
+          "description": "Combined average score."
+        },
+        "gradeLetter": {
+          "type": "string",
+          "description": "Predicate grade letter.",
+          "enum": ["A", "B", "C", "D", "E"],
+          "minLength": 1,
+          "maxLength": 2
+        },
+        "notes": {
+          "type": "string",
+          "description": "Surah and Juz memorization notes.",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "testDate": {
+          "type": "string",
+          "description": "Evaluation date.",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "docId",
+        "ownerId",
+        "studentId",
+        "studentDocId",
+        "classId",
+        "classDocId",
+        "semester",
+        "tahfidzScore",
+        "tajweedScore",
+        "totalScore",
+        "gradeLetter",
+        "notes",
+        "testDate",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ReportCard": {
+      "title": "ReportCard",
+      "description": "Digital report card record with attendance, attitudes, and publication state.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Logical report card ID.",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "docId": {
+          "type": "string",
+          "description": "Sanitized Firestore document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "studentId": {
+          "type": "number",
+          "description": "Numeric student ID."
+        },
+        "studentDocId": {
+          "type": "string",
+          "description": "Document ID of the Student.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "classId": {
+          "type": "number",
+          "description": "Numeric class ID."
+        },
+        "classDocId": {
+          "type": "string",
+          "description": "Document ID of the ClassRoom.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "semester": {
+          "type": "number",
+          "description": "Academic semester (1 or 2).",
+          "enum": [1, 2]
+        },
+        "academicYear": {
+          "type": "string",
+          "description": "Academic year string.",
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "status": {
+          "type": "string",
+          "description": "Publication lifecycle status.",
+          "enum": ["draft", "ready", "published"],
+          "minLength": 5,
+          "maxLength": 15
+        },
+        "sick": {
+          "type": "number",
+          "description": "Sick days count."
+        },
+        "permission": {
+          "type": "number",
+          "description": "Excused permission days count."
+        },
+        "unexcused": {
+          "type": "number",
+          "description": "Unexcused absence days count."
+        },
+        "teacherNotes": {
+          "type": "string",
+          "description": "Homeroom teacher evaluation notes.",
+          "minLength": 0,
+          "maxLength": 1000
+        },
+        "tahfidzNotes": {
+          "type": "string",
+          "description": "Tahfidz summary notes.",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "spiritualAttitude": {
+          "type": "string",
+          "description": "Spiritual attitude predicate.",
+          "enum": ["A", "B", "C"],
+          "minLength": 1,
+          "maxLength": 2
+        },
+        "spiritualDescription": {
+          "type": "string",
+          "description": "Spiritual attitude description.",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "socialAttitude": {
+          "type": "string",
+          "description": "Social attitude predicate.",
+          "enum": ["A", "B", "C"],
+          "minLength": 1,
+          "maxLength": 2
+        },
+        "socialDescription": {
+          "type": "string",
+          "description": "Social attitude description.",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "ekskul1Name": {
+          "type": "string",
+          "description": "Extracurricular 1 name.",
+          "minLength": 0,
+          "maxLength": 120
+        },
+        "ekskul1Pred": {
+          "type": "string",
+          "description": "Extracurricular 1 predicate.",
+          "enum": ["A", "B", "C"],
+          "minLength": 1,
+          "maxLength": 2
+        },
+        "ekskul1Desc": {
+          "type": "string",
+          "description": "Extracurricular 1 description.",
+          "minLength": 0,
+          "maxLength": 300
+        },
+        "ekskul2Name": {
+          "type": "string",
+          "description": "Extracurricular 2 name.",
+          "minLength": 0,
+          "maxLength": 120
+        },
+        "ekskul2Pred": {
+          "type": "string",
+          "description": "Extracurricular 2 predicate.",
+          "enum": ["A", "B", "C"],
+          "minLength": 1,
+          "maxLength": 2
+        },
+        "ekskul2Desc": {
+          "type": "string",
+          "description": "Extracurricular 2 description.",
+          "minLength": 0,
+          "maxLength": 300
+        },
+        "issuePlace": {
+          "type": "string",
+          "description": "Place where the report card is issued.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "issueDate": {
+          "type": "string",
+          "description": "Date of report card issuance.",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "headmasterName": {
+          "type": "string",
+          "description": "Headmaster full name.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "headmasterNip": {
+          "type": "string",
+          "description": "Headmaster NIP identifier.",
+          "minLength": 0,
+          "maxLength": 60
+        },
+        "classTeacherName": {
+          "type": "string",
+          "description": "Homeroom teacher name.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "docId",
+        "ownerId",
+        "studentId",
+        "studentDocId",
+        "classId",
+        "classDocId",
+        "semester",
+        "academicYear",
+        "status",
+        "sick",
+        "permission",
+        "unexcused",
+        "teacherNotes",
+        "tahfidzNotes",
+        "spiritualAttitude",
+        "spiritualDescription",
+        "socialAttitude",
+        "socialDescription",
+        "ekskul1Name",
+        "ekskul1Pred",
+        "ekskul1Desc",
+        "ekskul2Name",
+        "ekskul2Pred",
+        "ekskul2Desc",
+        "issuePlace",
+        "issueDate",
+        "headmasterName",
+        "headmasterNip",
+        "classTeacherName",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ExamFile": {
+      "title": "ExamFile",
+      "description": "Uploaded exam document metadata.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "number",
+          "description": "Numeric exam file ID."
+        },
+        "docId": {
+          "type": "string",
+          "description": "Firestore document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "subjectId": {
+          "type": "number",
+          "description": "Numeric subject ID."
+        },
+        "subjectDocId": {
+          "type": "string",
+          "description": "Document ID of the Subject.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "classId": {
+          "type": "number",
+          "description": "Numeric class ID."
+        },
+        "classDocId": {
+          "type": "string",
+          "description": "Document ID of the ClassRoom.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Exam document title.",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "fileName": {
+          "type": "string",
+          "description": "Uploaded file name.",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "fileSize": {
+          "type": "string",
+          "description": "Formatted file size.",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "uploadDate": {
+          "type": "string",
+          "description": "Upload date string.",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "docId",
+        "ownerId",
+        "subjectId",
+        "subjectDocId",
+        "classId",
+        "classDocId",
+        "title",
+        "fileName",
+        "fileSize",
+        "uploadDate",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ExamPackage": {
+      "title": "ExamPackage",
+      "description": "Question bank package linked to a Subject and ClassRoom.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "number",
+          "description": "Numeric package ID."
+        },
+        "docId": {
+          "type": "string",
+          "description": "Firestore document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "subjectId": {
+          "type": "number",
+          "description": "Numeric subject ID."
+        },
+        "subjectDocId": {
+          "type": "string",
+          "description": "Document ID of the Subject.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "classId": {
+          "type": "number",
+          "description": "Numeric class ID."
+        },
+        "classDocId": {
+          "type": "string",
+          "description": "Document ID of the ClassRoom.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "type": {
+          "type": "string",
+          "description": "Question package format.",
+          "enum": ["essay", "multiple_choice"],
+          "minLength": 5,
+          "maxLength": 20
+        },
+        "packageDate": {
+          "type": "string",
+          "description": "Display creation date string.",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "docId",
+        "ownerId",
+        "subjectId",
+        "subjectDocId",
+        "classId",
+        "classDocId",
+        "type",
+        "packageDate",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ExamQuestion": {
+      "title": "ExamQuestion",
+      "description": "Individual exam question belonging to an ExamPackage subcollection.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "number",
+          "description": "Numeric question ID."
+        },
+        "docId": {
+          "type": "string",
+          "description": "Firestore document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "packageDocId": {
+          "type": "string",
+          "description": "Parent ExamPackage document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "text": {
+          "type": "string",
+          "description": "Question prompt text.",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "optionA": {
+          "type": "string",
+          "description": "Multiple choice option A.",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "optionB": {
+          "type": "string",
+          "description": "Multiple choice option B.",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "optionC": {
+          "type": "string",
+          "description": "Multiple choice option C.",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "optionD": {
+          "type": "string",
+          "description": "Multiple choice option D.",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "correctAnswer": {
+          "type": "string",
+          "description": "Correct option letter or empty for essay.",
+          "enum": ["A", "B", "C", "D", ""],
+          "minLength": 0,
+          "maxLength": 2
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "docId",
+        "packageDocId",
+        "ownerId",
+        "text",
+        "optionA",
+        "optionB",
+        "optionC",
+        "optionD",
+        "correctAnswer",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": "AdminRecord",
+      "description": "System administrators lookup table."
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Educator and staff profiles with isolated PII access."
+    },
+    "/school_configs/{configId}": {
+      "schema": "SchoolConfig",
+      "description": "Real-time school identity and appearance configuration."
+    },
+    "/classes/{classId}": {
+      "schema": "ClassRoom",
+      "description": "School classes and homeroom teachers."
+    },
+    "/subjects/{subjectId}": {
+      "schema": "Subject",
+      "description": "Academic curriculum subjects."
+    },
+    "/students/{studentId}": {
+      "schema": "Student",
+      "description": "Enrolled students directory."
+    },
+    "/grades/{gradeId}": {
+      "schema": "Grade",
+      "description": "Academic subject evaluation grades."
+    },
+    "/tahfidz_grades/{tahfidzId}": {
+      "schema": "TahfidzGrade",
+      "description": "Tahfidz and Tajweed evaluation grades."
+    },
+    "/report_cards/{reportId}": {
+      "schema": "ReportCard",
+      "description": "Digital report card records."
+    },
+    "/exam_files/{fileId}": {
+      "schema": "ExamFile",
+      "description": "Uploaded exam file metadata."
+    },
+    "/exam_packages/{packageId}": {
+      "schema": "ExamPackage",
+      "description": "Exam question bank packages."
+    },
+    "/exam_packages/{packageId}/questions/{questionId}": {
+      "schema": "ExamQuestion",
+      "description": "Subcollection of questions belonging to an exam package."
+    }
+  }
+}

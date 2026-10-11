@@ -1,0 +1,8 @@
+{
+  "name": "Sistem Rapor Digital BR",
+  "description": "Sistem Pengelolaan Nilai, Rapor, Tahfidz, dan Bank Soal Ujian Baiturrahman",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
