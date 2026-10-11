@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#065f46" />
+      <stop offset="50%" stop-color="#047857" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde68a" />
+      <stop offset="50%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#b45309" />
+    </linearGradient>
+  </defs>
+  <!-- Rounded Squircle Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+  <!-- Outer Gold Octagonal/Crest Ring -->
+  <circle cx="256" cy="256" r="196" fill="none" stroke="url(#goldGrad)" stroke-width="10" opacity="0.85" />
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#ffffff" stroke-width="2" stroke-dasharray="8 8" opacity="0.35" />
+  <!-- Islamic Star / Rub el Hizb Accent -->
+  <g transform="translate(256, 256)" opacity="0.16">
+    <rect x="-130" y="-130" width="260" height="260" rx="16" fill="none" stroke="#fde68a" stroke-width="8" />
+    <rect x="-130" y="-130" width="260" height="260" rx="16" fill="none" stroke="#fde68a" stroke-width="8" transform="rotate(45)" />
+  </g>
+  <!-- Open Quran / Academic Book -->
+  <path d="M136 210 C136 195, 190 185, 250 205 L250 345 C190 325, 136 335, 136 350 Z" fill="#ffffff" />
+  <path d="M376 210 C376 195, 322 185, 262 205 L262 345 C322 325, 376 335, 376 350 Z" fill="#f1f5f9" />
+  <!-- Book Spine & Gold Pages Base -->
+  <path d="M130 356 C190 338, 245 348, 256 360 C267 348, 322 338, 382 356" fill="none" stroke="url(#goldGrad)" stroke-width="14" stroke-linecap="round" />
+  <!-- Book Lines -->
+  <line x1="162" y1="240" x2="230" y2="252" stroke="#047857" stroke-width="8" stroke-linecap="round" opacity="0.7" />
+  <line x1="162" y1="268" x2="230" y2="280" stroke="#047857" stroke-width="8" stroke-linecap="round" opacity="0.7" />
+  <line x1="162" y1="296" x2="216" y2="306" stroke="#047857" stroke-width="8" stroke-linecap="round" opacity="0.7" />
+  <line x1="350" y1="240" x2="282" y2="252" stroke="#047857" stroke-width="8" stroke-linecap="round" opacity="0.7" />
+  <line x1="350" y1="268" x2="282" y2="280" stroke="#047857" stroke-width="8" stroke-linecap="round" opacity="0.7" />
+  <line x1="350" y1="296" x2="296" y2="306" stroke="#047857" stroke-width="8" stroke-linecap="round" opacity="0.7" />
+  <!-- Top Graduation Cap / Star Emblem -->
+  <polygon points="256,108 326,142 256,176 186,142" fill="url(#goldGrad)" />
+  <path d="M214 158 L214 184 C214 196, 298 196, 298 184 L298 158" fill="none" stroke="#fde68a" stroke-width="8" stroke-linecap="round" />
+  <line x1="316" y1="147" x2="316" y2="188" stroke="#fde68a" stroke-width="6" stroke-linecap="round" />
+  <circle cx="316" cy="192" r="6" fill="#f59e0b" />
+</svg>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp, AppView } from '../context/AppContext';
 import { BrandLogoIcon } from './BrandLogoIcon';
+import { PWAInstallButton } from './PWAInstallButton';
 import { getSidebarStyles } from '../utils/theme';
 import {
   LayoutDashboard,
@@ -181,8 +182,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen 
           })}
         </div>
 
-        {/* Device Dark Mode Toggle */}
-        <div className={`px-3 py-2 border-t ${sidebarStyle.headerBorder}`}>
+        {/* PWA Install & Device Dark Mode Toggle */}
+        <div className={`px-3 py-2 border-t ${sidebarStyle.headerBorder} space-y-1.5`}>
+          <PWAInstallButton
+            variant="sidebar"
+            onAfterClick={() => setIsMobileOpen(false)}
+          />
           <button
             type="button"
             onClick={() => toggleDeviceDarkMode()}

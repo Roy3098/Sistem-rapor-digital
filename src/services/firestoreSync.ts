@@ -32,6 +32,7 @@ import {
   SiteSettings,
   ThemeSettings,
 } from '../types';
+import { normalizeThemeSettings } from '../utils/theme';
 
 // =========================================================
 // Document ID Builders (Strictly matching ^[a-zA-Z0-9_\-]+$)
@@ -344,33 +345,105 @@ export async function syncSchoolConfigToFirestore(
   uid: string,
   siteSettings: SiteSettings,
   themeSettings: ThemeSettings,
-  academicYear: string
+  academicYear: string,
+  updatedAtMs?: number
 ): Promise<void> {
-  const docId = getSchoolConfigDocId(uid);
-  const validColorThemes = [
-    'emerald',
-    'blue',
-    'indigo',
-    'teal',
-    'amber',
-    'rose',
-    'slate',
-    'violet',
-    'cyan',
-    'crimson',
-    'custom',
-  ];
-  const safeColorTheme = validColorThemes.includes(themeSettings.colorTheme)
-    ? themeSettings.colorTheme
-    : 'custom';
+  if (isFirestoreQuotaExhausted()) return;
 
-  const rawSurface = themeSettings.surfaceMode || 'light';
-  const sharedLightSurface =
-    rawSurface === 'dark_elevated' || (rawSurface as string) === 'dark'
-      ? ((typeof window !== 'undefined' && localStorage.getItem('bw_shared_light_surface')) as ThemeSettings['surfaceMode']) || 'light'
-      : rawSurface;
+  const safeOwnerId = sanitizeId(uid || auth.currentUser?.uid || 'superadmin_global', 'usr');
+  const normTheme = normalizeThemeSettings(themeSettings);
+
+  const safeColorTheme = sanitizeString(normTheme.colorTheme || 'emerald', 30, 'emerald');
+  const safeContentWidth = sanitizeString(normTheme.contentWidth || 'contained', 30, 'contained');
+  const safeDensity = sanitizeString(normTheme.density || 'comfortable', 30, 'comfortable');
+  const safeBorderRadius = sanitizeString(normTheme.borderRadius || 'modern', 30, 'modern');
+  const safeHeaderStyle = sanitizeString(normTheme.headerStyle || 'light', 30, 'light');
+  const safeSidebarStyle = sanitizeString(normTheme.sidebarStyle || 'light', 30, 'light');
+
+  const rightLogo = normTheme.customRightLogoUrl || siteSettings.customRightLogoUrl || '';
+
+  const themeForExtended: ThemeSettings = {
+    ...normTheme,
+    colorTheme: (normTheme.colorTheme || 'emerald') as ThemeSettings['colorTheme'],
+    customPrimaryHex: normTheme.customPrimaryHex || '#047857',
+    customSecondaryHex: normTheme.customSecondaryHex || '#0f172a',
+    customPageBgHex: normTheme.customPageBgHex || '',
+    pageBgStyle: normTheme.pageBgStyle || 'clean',
+    surfaceMode: normTheme.surfaceMode || 'light',
+    surfaceThemeMode: normTheme.surfaceThemeMode || 'light',
+    fontScale: normTheme.fontScale || 'normal',
+    headingWeight: normTheme.headingWeight || 'bold',
+    cardHoverEffect: normTheme.cardHoverEffect || 'lift',
+    shadowIntensity: normTheme.shadowIntensity || 'subtle',
+    borderContrast: normTheme.borderContrast || 'normal',
+    borderWidth: normTheme.borderWidth || 'normal',
+    cardAccentBar: normTheme.cardAccentBar || 'none',
+    buttonStyle: normTheme.buttonStyle || 'solid',
+    badgeStyle: normTheme.badgeStyle || 'soft',
+    heroBannerStyle: normTheme.heroBannerStyle || 'gradient_brand',
+    heroBannerHeight: normTheme.heroBannerHeight || 'standard',
+    statsCardStyle: normTheme.statsCardStyle || 'modern_elevated',
+    modalBackdropStyle: normTheme.modalBackdropStyle || 'blur_dark',
+    scrollbarStyle: normTheme.scrollbarStyle || 'default',
+    sectionSpacing: normTheme.sectionSpacing || 'normal',
+    headingFontFamily: normTheme.headingFontFamily || 'inherit',
+    announcementSpeed: normTheme.announcementSpeed || 'normal',
+    showHeroBanner: normTheme.showHeroBanner !== false,
+    showHeroStats: normTheme.showHeroStats !== false,
+    showStatTrends: normTheme.showStatTrends !== false,
+    showFooter: normTheme.showFooter !== false,
+    stickyHeader: normTheme.stickyHeader !== false,
+    showBreadcrumbIndicator: normTheme.showBreadcrumbIndicator !== false,
+    tableRowHoverHighlight: normTheme.tableRowHoverHighlight !== false,
+    enableGlassmorphism: normTheme.enableGlassmorphism !== false,
+    enableAnimatedGradients: Boolean(normTheme.enableAnimatedGradients),
+    highContrastText: Boolean(normTheme.highContrastText),
+    compactMobileNav: Boolean(normTheme.compactMobileNav),
+    customCssSnippet: normTheme.customCssSnippet || '',
+    // Avoid duplicating customLogoUrl inside extendedConfigJson since it is stored at top-level customLogoUrl
+    customLogoUrl: '',
+    customRightLogoUrl: rightLogo,
+    reportShowLeftLogo: normTheme.reportShowLeftLogo !== false,
+    reportShowRightLogo: normTheme.reportShowRightLogo !== false,
+    reportLogoSize: normTheme.reportLogoSize || 'md',
+    reportLogoShape: normTheme.reportLogoShape || 'rounded',
+    reportKopDividerStyle: normTheme.reportKopDividerStyle || 'double',
+    reportCustomTitle: normTheme.reportCustomTitle || siteSettings.reportCustomTitle || '',
+    reportThemeColor: (normTheme.reportThemeColor || safeColorTheme) as ThemeSettings['reportThemeColor'],
+    reportCustomHex: normTheme.reportCustomHex || '#047857',
+    reportBorderStyle: normTheme.reportBorderStyle || 'double',
+    reportHeaderStyle: normTheme.reportHeaderStyle || 'dual_logo',
+    reportFontStyle: normTheme.reportFontStyle || 'sans',
+    reportFontSize: normTheme.reportFontSize || 'md',
+    reportTableStyle: normTheme.reportTableStyle || 'tinted',
+    reportRowDensity: normTheme.reportRowDensity || 'compact',
+    reportPaperSize: normTheme.reportPaperSize || 'A4',
+    reportOrientation: normTheme.reportOrientation || 'portrait',
+    reportMarginSize: normTheme.reportMarginSize || 'narrow',
+    reportPdfQuality: normTheme.reportPdfQuality || 'high',
+    reportSinglePageFit: normTheme.reportSinglePageFit !== false,
+    reportWatermarkOpacity: normTheme.reportWatermarkOpacity || 'subtle',
+    reportShowWatermark: normTheme.reportShowWatermark !== false,
+    reportShowBismillah: normTheme.reportShowBismillah !== false,
+    reportShowRank: normTheme.reportShowRank !== false,
+    reportShowTahfidz: normTheme.reportShowTahfidz !== false,
+    reportShowAttitude: normTheme.reportShowAttitude !== false,
+    reportShowEkskul: normTheme.reportShowEkskul !== false,
+    reportShowAttendance: normTheme.reportShowAttendance !== false,
+    reportShowKkm: normTheme.reportShowKkm !== false,
+    reportShowPredicate: normTheme.reportShowPredicate !== false,
+    reportShowTerbilang: normTheme.reportShowTerbilang !== false,
+    reportShowTeacherNotes: normTheme.reportShowTeacherNotes !== false,
+    reportShowParentSignature: normTheme.reportShowParentSignature !== false,
+    reportShowClassTeacherSignature: normTheme.reportShowClassTeacherSignature !== false,
+    reportShowHeadmasterSignature: normTheme.reportShowHeadmasterSignature !== false,
+    reportShowSeal: normTheme.reportShowSeal !== false,
+    reportSignatureHeight: normTheme.reportSignatureHeight || 'normal',
+    reportShowFooterMeta: normTheme.reportShowFooterMeta !== false,
+  };
 
   const extendedPayload = {
+    updatedAtMs: updatedAtMs || Date.now(),
     site: {
       foundationName: siteSettings.foundationName || '',
       schoolAddress: siteSettings.schoolAddress || '',
@@ -384,107 +457,51 @@ export async function syncSchoolConfigToFirestore(
       watermarkText: siteSettings.watermarkText || 'DOKUMEN RESMI',
       kkmDefault: siteSettings.kkmDefault ?? 70,
       footerText: siteSettings.footerText || '',
-      customRightLogoUrl: siteSettings.customRightLogoUrl || themeSettings.customRightLogoUrl || '',
-      reportCustomTitle: siteSettings.reportCustomTitle || themeSettings.reportCustomTitle || '',
+      reportCustomTitle: siteSettings.reportCustomTitle || normTheme.reportCustomTitle || '',
       announcements: Array.isArray(siteSettings.announcements) ? siteSettings.announcements : [],
     },
-    theme: {
-      ...themeSettings,
-      colorTheme: themeSettings.colorTheme || 'emerald',
-      customPrimaryHex: themeSettings.customPrimaryHex || '#047857',
-      customSecondaryHex: themeSettings.customSecondaryHex || '#0f172a',
-      customPageBgHex: themeSettings.customPageBgHex || '',
-      pageBgStyle: themeSettings.pageBgStyle || 'slate',
-      surfaceMode: sharedLightSurface,
-      surfaceThemeMode: 'light',
-      webFontFamily: themeSettings.webFontFamily || 'jakarta',
-      fontScale: themeSettings.fontScale || 'normal',
-      headingWeight: themeSettings.headingWeight || 'bold',
-      letterSpacingStyle: themeSettings.letterSpacingStyle || 'normal',
-      lineHeightStyle: themeSettings.lineHeightStyle || 'normal',
-      cardSurfaceStyle: themeSettings.cardSurfaceStyle || 'bordered',
-      cardHoverEffect: themeSettings.cardHoverEffect || 'lift',
-      shadowIntensity: themeSettings.shadowIntensity || 'subtle',
-      webTableStyle: themeSettings.webTableStyle || 'default',
-      pagePattern: themeSettings.pagePattern || 'none',
-      borderContrast: themeSettings.borderContrast || 'normal',
-      buttonStyle: themeSettings.buttonStyle || 'solid',
-      inputFieldStyle: themeSettings.inputFieldStyle || 'outlined',
-      badgeStyle: themeSettings.badgeStyle || 'soft',
-      navActiveIndicator: themeSettings.navActiveIndicator || 'soft_tinted',
-      heroBannerStyle: themeSettings.heroBannerStyle || 'gradient_brand',
-      heroBannerHeight: themeSettings.heroBannerHeight || 'standard',
-      statsCardStyle: themeSettings.statsCardStyle || 'modern_elevated',
-      modalBackdropStyle: themeSettings.modalBackdropStyle || 'blur_dark',
-      scrollbarStyle: themeSettings.scrollbarStyle || 'default',
-      animationSpeed: themeSettings.animationSpeed || 'normal',
-      showHeroBanner: themeSettings.showHeroBanner !== false,
-      showHeroStats: themeSettings.showHeroStats !== false,
-      showFooter: themeSettings.showFooter !== false,
-      stickyHeader: themeSettings.stickyHeader !== false,
-      showBreadcrumbIndicator: themeSettings.showBreadcrumbIndicator !== false,
-      compactMobileNav: Boolean(themeSettings.compactMobileNav),
-      customCssSnippet: themeSettings.customCssSnippet || '',
-      customRightLogoUrl: themeSettings.customRightLogoUrl || siteSettings.customRightLogoUrl || '',
-      reportShowLeftLogo: themeSettings.reportShowLeftLogo !== false,
-      reportShowRightLogo: themeSettings.reportShowRightLogo !== false,
-      reportLogoSize: themeSettings.reportLogoSize || 'md',
-      reportLogoShape: themeSettings.reportLogoShape || 'rounded',
-      reportKopDividerStyle: themeSettings.reportKopDividerStyle || 'double',
-      reportCustomTitle: themeSettings.reportCustomTitle || siteSettings.reportCustomTitle || '',
-      reportThemeColor: themeSettings.reportThemeColor || safeColorTheme,
-      reportCustomHex: themeSettings.reportCustomHex || '#047857',
-      reportBorderStyle: themeSettings.reportBorderStyle || 'double',
-      reportHeaderStyle: themeSettings.reportHeaderStyle || 'dual_logo',
-      reportFontStyle: themeSettings.reportFontStyle || 'sans',
-      reportFontSize: themeSettings.reportFontSize || 'md',
-      reportTableStyle: themeSettings.reportTableStyle || 'tinted',
-      reportRowDensity: themeSettings.reportRowDensity || 'compact',
-      reportPaperSize: themeSettings.reportPaperSize || 'A4',
-      reportOrientation: themeSettings.reportOrientation || 'portrait',
-      reportMarginSize: themeSettings.reportMarginSize || 'narrow',
-      reportPdfQuality: themeSettings.reportPdfQuality || 'high',
-      reportSinglePageFit: themeSettings.reportSinglePageFit !== false,
-      reportWatermarkOpacity: themeSettings.reportWatermarkOpacity || 'subtle',
-      reportShowWatermark: themeSettings.reportShowWatermark !== false,
-      reportShowBismillah: themeSettings.reportShowBismillah !== false,
-      reportShowRank: themeSettings.reportShowRank !== false,
-      reportShowTahfidz: themeSettings.reportShowTahfidz !== false,
-      reportShowAttitude: themeSettings.reportShowAttitude !== false,
-      reportShowEkskul: themeSettings.reportShowEkskul !== false,
-      reportShowAttendance: themeSettings.reportShowAttendance !== false,
-      reportShowKkm: themeSettings.reportShowKkm !== false,
-      reportShowPredicate: themeSettings.reportShowPredicate !== false,
-      reportShowTerbilang: themeSettings.reportShowTerbilang !== false,
-      reportShowTeacherNotes: themeSettings.reportShowTeacherNotes !== false,
-      reportShowParentSignature: themeSettings.reportShowParentSignature !== false,
-      reportShowClassTeacherSignature: themeSettings.reportShowClassTeacherSignature !== false,
-      reportShowHeadmasterSignature: themeSettings.reportShowHeadmasterSignature !== false,
-      reportShowSeal: themeSettings.reportShowSeal !== false,
-      reportSignatureHeight: themeSettings.reportSignatureHeight || 'normal',
-      reportShowFooterMeta: themeSettings.reportShowFooterMeta !== false,
-    },
+    theme: themeForExtended,
   };
 
-  const safeContentWidth = ['contained', 'full'].includes(themeSettings.contentWidth)
-    ? themeSettings.contentWidth
-    : 'contained';
-  const safeDensity = ['comfortable', 'compact'].includes(themeSettings.density)
-    ? themeSettings.density
-    : 'comfortable';
-  const safeBorderRadius = ['subtle', 'modern', 'rounded'].includes(themeSettings.borderRadius)
-    ? themeSettings.borderRadius
-    : 'modern';
-  const safeHeaderStyle = ['light', 'dark', 'brand', 'glass', 'colored'].includes(
-    themeSettings.headerStyle
-  )
-    ? themeSettings.headerStyle
-    : 'light';
-  const safeSidebarStyle = ['light', 'dark', 'brand', 'colored'].includes(
-    themeSettings.sidebarStyle
-  )
-    ? themeSettings.sidebarStyle
-    : 'light';
+  const serializeExtendedSafely = (): string => {
+    const rawJson = JSON.stringify(extendedPayload);
+    if (rawJson.length <= 495000) return rawJson;
+
+    // Step 1: Trim savedCustomFrames if oversized
+    const step1 = {
+      ...extendedPayload,
+      theme: {
+        ...extendedPayload.theme,
+        savedCustomFrames: [],
+      },
+    };
+    const json1 = JSON.stringify(step1);
+    if (json1.length <= 495000) return json1;
+
+    // Step 2: Trim customFrameConfig.customImageUrl if still oversized
+    const step2 = {
+      ...step1,
+      theme: {
+        ...step1.theme,
+        customFrameConfig: step1.theme.customFrameConfig
+          ? { ...step1.theme.customFrameConfig, customImageUrl: '' }
+          : undefined,
+      },
+    };
+    const json2 = JSON.stringify(step2);
+    if (json2.length <= 495000) return json2;
+
+    // Step 3: Trim customRightLogoUrl if still oversized so web theme settings always sync
+    const step3 = {
+      ...step2,
+      theme: {
+        ...step2.theme,
+        customRightLogoUrl: '',
+      },
+    };
+    const json3 = JSON.stringify(step3);
+    return json3.length <= 495000 ? json3 : '{}';
+  };
 
   const mutableFields = {
     academicYear: sanitizeString(academicYear, 20, '2025/2026'),
@@ -495,68 +512,57 @@ export async function syncSchoolConfigToFirestore(
     enableTahfidz: Boolean(siteSettings.enableTahfidz),
     enableBankSoal: Boolean(siteSettings.enableBankSoal),
     colorTheme: safeColorTheme,
-    layout: themeSettings.layout === 'topbar' ? 'topbar' : 'sidebar',
+    layout: normTheme.layout === 'topbar' ? 'topbar' : 'sidebar',
     contentWidth: safeContentWidth,
     density: safeDensity,
     borderRadius: safeBorderRadius,
-    showAnnouncement: Boolean(themeSettings.showAnnouncement),
-    accentSaturation: themeSettings.accentSaturation === 'minimal' ? 'minimal' : 'vibrant',
+    showAnnouncement: Boolean(normTheme.showAnnouncement),
+    accentSaturation: normTheme.accentSaturation === 'minimal' ? 'minimal' : 'vibrant',
     headerStyle: safeHeaderStyle,
     sidebarStyle: safeSidebarStyle,
-    logoIconType: themeSettings.logoIconType || 'image',
+    logoIconType: sanitizeString(normTheme.logoIconType || 'image', 30, 'image'),
     customLogoUrl: sanitizeString(
-      themeSettings.customLogoUrl || siteSettings.customLogoUrl || '',
+      normTheme.customLogoUrl || siteSettings.customLogoUrl || '',
       250000,
       ''
     ),
-    extendedConfigJson: (() => {
-      const rawJson = JSON.stringify(extendedPayload);
-      if (rawJson.length <= 500000) return rawJson;
-      const compactPayload = {
-        ...extendedPayload,
-        theme: {
-          ...extendedPayload.theme,
-          savedCustomFrames: [],
-        },
-      };
-      const compactJson = JSON.stringify(compactPayload);
-      return compactJson.length <= 500000 ? compactJson : '{}';
-    })(),
+    extendedConfigJson: serializeExtendedSafely(),
   };
 
-  const userEmail = auth.currentUser?.email;
-  const isBootstrapped =
-    userEmail === 'nasam998@gmail.com' ||
-    userEmail === 'akhirzaman998@gmail.com' ||
-    userEmail === 'mediabaiturrahman01@gmail.com';
+  const globalDocRef = doc(db, 'school_configs', GLOBAL_SCHOOL_CONFIG_DOC_ID);
+  const writeGlobalTask = withWriteTimeout(
+    setDoc(globalDocRef, {
+      docId: GLOBAL_SCHOOL_CONFIG_DOC_ID,
+      ownerId: safeOwnerId,
+      ...mutableFields,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  )
+    .then(() => {
+      markDocKnownInFirestore('school_configs', GLOBAL_SCHOOL_CONFIG_DOC_ID);
+    })
+    .catch((err) => {
+      if (isQuotaExhaustedError(err)) {
+        markFirestoreQuotaExhausted();
+      }
+    });
 
-  const tasks: Promise<void>[] = [
-    upsertFirestoreDoc(
-      'school_configs',
-      docId,
-      {
-        docId,
-        ownerId: uid,
-        ...mutableFields,
-      },
-      mutableFields
-    ),
-  ];
+  const tasks: Promise<void>[] = [writeGlobalTask];
 
-  if (isBootstrapped || !isDocKnownInFirestore('school_configs', GLOBAL_SCHOOL_CONFIG_DOC_ID)) {
+  if (auth.currentUser?.uid) {
+    const docId = getSchoolConfigDocId(auth.currentUser.uid);
     tasks.push(
       upsertFirestoreDoc(
         'school_configs',
-        GLOBAL_SCHOOL_CONFIG_DOC_ID,
+        docId,
         {
-          docId: GLOBAL_SCHOOL_CONFIG_DOC_ID,
-          ownerId: uid,
+          docId,
+          ownerId: auth.currentUser.uid,
           ...mutableFields,
         },
         mutableFields
-      ).catch(() => {
-        // Ignore if global_config is already owned by another administrator
-      })
+      ).catch(() => {})
     );
   }
 
@@ -566,29 +572,28 @@ export async function syncSchoolConfigToFirestore(
 export function parseExtendedSchoolConfig(data: Record<string, any>): {
   siteExtra: Partial<SiteSettings>;
   themeExtra: Partial<ThemeSettings>;
+  updatedAtMs: number;
 } {
   if (!data.extendedConfigJson || typeof data.extendedConfigJson !== 'string') {
-    return { siteExtra: {}, themeExtra: {} };
+    return { siteExtra: {}, themeExtra: {}, updatedAtMs: 0 };
   }
   try {
     const parsed = JSON.parse(data.extendedConfigJson);
     const rawTheme: Partial<ThemeSettings> =
       parsed?.theme && typeof parsed.theme === 'object' ? { ...parsed.theme } : {};
-    // Strip Mode Malam from remote config so Night Mode never syncs across devices
-    if (
-      rawTheme.surfaceMode === 'dark_elevated' ||
-      (rawTheme.surfaceMode as string) === 'dark' ||
-      rawTheme.surfaceThemeMode === 'dark_slate'
-    ) {
-      rawTheme.surfaceMode = 'light';
+    const rawSite: Partial<SiteSettings> =
+      parsed?.site && typeof parsed.site === 'object' ? { ...parsed.site } : {};
+    if (rawTheme.customRightLogoUrl && !rawSite.customRightLogoUrl) {
+      rawSite.customRightLogoUrl = rawTheme.customRightLogoUrl;
     }
-    rawTheme.surfaceThemeMode = 'light';
+    const updatedAtMs = typeof parsed?.updatedAtMs === 'number' ? parsed.updatedAtMs : 0;
     return {
-      siteExtra: parsed?.site && typeof parsed.site === 'object' ? parsed.site : {},
+      siteExtra: rawSite,
       themeExtra: rawTheme,
+      updatedAtMs,
     };
   } catch {
-    return { siteExtra: {}, themeExtra: {} };
+    return { siteExtra: {}, themeExtra: {}, updatedAtMs: 0 };
   }
 }
 
@@ -1021,8 +1026,8 @@ export async function seedFullWorkspaceToFirestore(
   if (isFirestoreQuotaExhausted()) return;
 
   const shouldSyncConfig =
-    Boolean(payload.includeSchoolConfig) ||
-    !isDocKnownInFirestore('school_configs', GLOBAL_SCHOOL_CONFIG_DOC_ID);
+    Boolean(payload.includeSchoolConfig) &&
+    (!onlyIfMissing || !isDocKnownInFirestore('school_configs', GLOBAL_SCHOOL_CONFIG_DOC_ID));
 
   const usersToSync = onlyIfMissing
     ? deduplicatedUsers.filter(

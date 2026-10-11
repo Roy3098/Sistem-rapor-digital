@@ -94,7 +94,13 @@ import {
   INITIAL_TEACHER_ATTENDANCE,
   INITIAL_TEACHING_ASSIGNMENTS,
 } from '../data/initialData';
-import { getThemeClasses, ThemeClasses, applyThemeCssVariables } from '../utils/theme';
+import {
+  getThemeClasses,
+  ThemeClasses,
+  applyThemeCssVariables,
+  normalizeThemeSettings,
+  isDarkSurfaceMode,
+} from '../utils/theme';
 
 export type AppView =
   | 'dashboard'
@@ -335,19 +341,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(() => {
     const saved = localStorage.getItem('bw_theme_settings');
-    return saved ? JSON.parse(saved) : INITIAL_THEME_SETTINGS;
+    if (saved) {
+      try {
+        return normalizeThemeSettings({ ...INITIAL_THEME_SETTINGS, ...JSON.parse(saved) });
+      } catch {
+        return normalizeThemeSettings(INITIAL_THEME_SETTINGS);
+      }
+    }
+    return normalizeThemeSettings(INITIAL_THEME_SETTINGS);
   });
 
-  const [isDeviceDarkMode, setIsDeviceDarkModeState] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
+  const [deviceDarkOverride, setDeviceDarkOverrideState] = useState<boolean | null>(() => {
+    if (typeof window === 'undefined') return null;
     const saved = localStorage.getItem('bw_device_dark_mode');
-    return saved === 'dark';
+    if (saved === 'dark') return true;
+    if (saved === 'light') return false;
+    return null;
   });
+
+  const isDeviceDarkMode = isDarkSurfaceMode(themeSettings, deviceDarkOverride);
   const isDeviceDarkModeRef = useRef<boolean>(isDeviceDarkMode);
+  const deviceDarkOverrideRef = useRef<boolean | null>(deviceDarkOverride);
+  const lastRemoteSurfaceModeRef = useRef<string | null>(null);
   isDeviceDarkModeRef.current = isDeviceDarkMode;
+  deviceDarkOverrideRef.current = deviceDarkOverride;
+
+  const clearDeviceDarkOverride = () => {
+    setDeviceDarkOverrideState(null);
+    deviceDarkOverrideRef.current = null;
+    localStorage.removeItem('bw_device_dark_mode');
+  };
 
   const setDeviceDarkMode = (enabled: boolean) => {
-    setIsDeviceDarkModeState(enabled);
+    setDeviceDarkOverrideState(enabled);
+    deviceDarkOverrideRef.current = enabled;
     isDeviceDarkModeRef.current = enabled;
     localStorage.setItem('bw_device_dark_mode', enabled ? 'dark' : 'light');
     applyThemeCssVariables(themeSettingsRef.current, enabled);
@@ -502,7 +529,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     setThemeSettings((prev) => {
-      const nextTheme: ThemeSettings = {
+      const nextTheme: ThemeSettings = normalizeThemeSettings({
+        ...INITIAL_THEME_SETTINGS,
         ...prev,
         ...themeExtra,
         colorTheme:
@@ -544,7 +572,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           (themeExtra.logoIconType as ThemeSettings['logoIconType']) ||
           (d.logoIconType as ThemeSettings['logoIconType']) ||
           prev.logoIconType,
-        customLogoUrl: String(d.customLogoUrl || prev.customLogoUrl || ''),
+        customLogoUrl: String(
+          d.customLogoUrl ?? themeExtra.customLogoUrl ?? prev.customLogoUrl ?? ''
+        ),
         heroBannerStyle:
           (themeExtra.heroBannerStyle as ThemeSettings['heroBannerStyle']) ||
           prev.heroBannerStyle ||
@@ -557,15 +587,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           (themeExtra.statsCardStyle as ThemeSettings['statsCardStyle']) ||
           prev.statsCardStyle ||
           'modern_elevated',
-      };
+      });
+
+      const remoteSurface = nextTheme.surfaceMode || 'light';
+      if (
+        lastRemoteSurfaceModeRef.current !== null &&
+        lastRemoteSurfaceModeRef.current !== remoteSurface
+      ) {
+        clearDeviceDarkOverride();
+      }
+      lastRemoteSurfaceModeRef.current = remoteSurface;
+
+      const effectiveDark = isDarkSurfaceMode(nextTheme, deviceDarkOverrideRef.current);
       themeSettingsRef.current = nextTheme;
-      applyThemeCssVariables(nextTheme, isDeviceDarkModeRef.current);
+      localStorage.setItem('bw_theme_settings', JSON.stringify(nextTheme));
+      applyThemeCssVariables(nextTheme, effectiveDark);
       return nextTheme;
     });
     markSynced();
   };
 
-  // Debounced unified school_configs sync (restricted strictly to Superadmin)
+  // Debounced unified school_configs sync (restricted strictly to Superadmin, works with or without Google OAuth)
   const scheduleSchoolConfigSync = () => {
     if (!isSuperAdminUser(currentUserRef.current) || isFirestoreQuotaExhausted()) return;
     lastLocalConfigWriteRef.current = Date.now();
@@ -573,8 +615,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       clearTimeout(configSyncTimerRef.current);
     }
     configSyncTimerRef.current = setTimeout(async () => {
-      const uid = auth.currentUser?.uid;
-      if (!uid || isFirestoreQuotaExhausted()) return;
+      if (isFirestoreQuotaExhausted()) return;
+      const uid = auth.currentUser?.uid || 'superadmin_global';
       try {
         setIsSyncing(true);
         await syncSchoolConfigToFirestore(
@@ -583,11 +625,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           themeSettingsRef.current,
           academicYearRef.current
         );
+        setIsCloudSynced(true);
         markSynced();
       } finally {
         setIsSyncing(false);
       }
-    }, 800);
+    }, 400);
   };
 
   // Ensure parent Class, Subject, and Student exist in Firestore before writing child documents (Pillar 1 Master Gate)
@@ -669,9 +712,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         switch (e.key) {
           case 'bw_theme_settings': {
-            const parsedTheme = JSON.parse(e.newValue) as ThemeSettings;
+            const parsedTheme = normalizeThemeSettings(JSON.parse(e.newValue) as ThemeSettings);
             themeSettingsRef.current = parsedTheme;
-            applyThemeCssVariables(parsedTheme);
+            applyThemeCssVariables(
+              parsedTheme,
+              isDarkSurfaceMode(parsedTheme, deviceDarkOverrideRef.current)
+            );
             setThemeSettings(parsedTheme);
             break;
           }
@@ -762,15 +808,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (snap) => {
         if (snap.exists()) {
           markDocKnownInFirestore('school_configs', GLOBAL_SCHOOL_CONFIG_DOC_ID);
-        }
-        if (
-          snap.metadata.hasPendingWrites ||
-          Date.now() - lastLocalConfigWriteRef.current < 2500
-        ) {
-          return;
-        }
-        if (snap.exists()) {
+          if (
+            snap.metadata.hasPendingWrites ||
+            Date.now() - lastLocalConfigWriteRef.current < 2000
+          ) {
+            return;
+          }
           applyRemoteSchoolConfig(snap.data());
+        } else if (isSuperAdminUser(currentUserRef.current) && !isFirestoreQuotaExhausted()) {
+          // Initialize global_config in Firestore if missing when Super Admin is active
+          syncSchoolConfigToFirestore(
+            auth.currentUser?.uid || 'superadmin_global',
+            siteSettingsRef.current,
+            themeSettingsRef.current,
+            academicYearRef.current
+          ).catch(() => {});
         }
       },
       () => {
@@ -1360,19 +1412,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         email === 'akhirzaman998@gmail.com' ||
         email === 'mediabaiturrahman01@gmail.com';
 
+      const alreadySuperAdmin = isSuperAdminAccount(currentUserRef.current);
+      const isSuperAdminEffective = isBootstrappedAdmin || alreadySuperAdmin;
+
       const googleUser: User = {
-        id: `usr-${fbUser.uid.slice(0, 8)}`,
-        username: isBootstrappedAdmin ? 'superadmin' : email.split('@')[0],
-        fullName: fbUser.displayName || 'Pendidik Baiturrahman',
+        id: alreadySuperAdmin ? currentUserRef.current!.id : `usr-${fbUser.uid.slice(0, 8)}`,
+        username: isSuperAdminEffective ? 'superadmin' : email.split('@')[0],
+        fullName:
+          alreadySuperAdmin && currentUserRef.current?.fullName
+            ? currentUserRef.current.fullName
+            : fbUser.displayName || 'Pendidik Baiturrahman',
         email,
         avatarUrl:
           fbUser.photoURL || '/src/assets/images/avatar_muhammad_siroj_1791464103883.jpg',
-        role: isBootstrappedAdmin ? 'superadmin' : 'guru',
+        role: isSuperAdminEffective ? 'superadmin' : 'guru',
         joinedDate: new Date().toLocaleDateString('id-ID'),
       };
 
       localStorage.removeItem('bw_explicit_logout');
       setCurrentUser(googleUser);
+      if (isSuperAdminEffective) {
+        syncSchoolConfigToFirestore(
+          fbUser.uid,
+          siteSettingsRef.current,
+          themeSettingsRef.current,
+          academicYearRef.current
+        ).catch(() => {});
+      }
       showToast(`Sinkronisasi Realtime aktif dengan akun ${email}`, 'success');
       return true;
     } catch (err: any) {
@@ -1387,6 +1453,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const forceSyncAllToCloud = async (): Promise<void> => {
     await resetFirestoreQuotaState();
     const uid = auth.currentUser?.uid;
+    if (isSuperAdminAccount(currentUserRef.current)) {
+      await syncSchoolConfigToFirestore(
+        uid || 'superadmin_global',
+        siteSettingsRef.current,
+        themeSettingsRef.current,
+        academicYearRef.current
+      ).catch(() => {});
+    }
     if (!uid) {
       await connectGoogleCloudSync();
       return;
@@ -1430,7 +1504,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (cleanUsername === 'superadmin') {
       if (cleanPassword === 'superadmin123') {
         localStorage.removeItem('bw_explicit_logout');
+        currentUserRef.current = SUPERADMIN_USER;
         setCurrentUser(SUPERADMIN_USER);
+        if (!isDocKnownInFirestore('school_configs', GLOBAL_SCHOOL_CONFIG_DOC_ID)) {
+          scheduleSchoolConfigSync();
+        }
         showToast('Login berhasil sebagai Super Administrator!', 'success');
         return { success: true };
       } else {
@@ -1495,6 +1573,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const logout = () => {
+    if (configSyncTimerRef.current && isSuperAdminUser(currentUserRef.current)) {
+      clearTimeout(configSyncTimerRef.current);
+      configSyncTimerRef.current = null;
+      const uid = auth.currentUser?.uid || 'superadmin_global';
+      syncSchoolConfigToFirestore(
+        uid,
+        siteSettingsRef.current,
+        themeSettingsRef.current,
+        academicYearRef.current
+      ).catch(() => {});
+    }
     localStorage.setItem('bw_explicit_logout', '1');
     setIsThemeModalOpen(false);
     setCurrentUser(null);
@@ -1624,53 +1713,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     newSettings: Partial<ThemeSettings>,
     options?: { silent?: boolean }
   ) => {
+    const isSuperAdmin = isSuperAdminAccount(currentUserRef.current);
     const keys = Object.keys(newSettings);
-    const isDarkToggle =
-      newSettings.surfaceMode === 'dark_elevated' ||
-      newSettings.surfaceThemeMode === 'dark_slate';
-    const isLightToggle =
-      (newSettings.surfaceMode === 'light' || newSettings.surfaceThemeMode === 'light') &&
-      isDeviceDarkModeRef.current;
+    const isOnlySurfaceToggle =
+      keys.length <= 2 &&
+      keys.every((k) => k === 'surfaceMode' || k === 'surfaceThemeMode');
 
-    if (isDarkToggle) {
-      setDeviceDarkMode(true);
+    if (!isSuperAdmin && isOnlySurfaceToggle) {
+      const wantDark =
+        newSettings.surfaceMode === 'dark_elevated' ||
+        newSettings.surfaceThemeMode === 'dark_slate';
+      setDeviceDarkMode(wantDark);
       if (!options?.silent) {
-        showToast('Mode Malam aktif untuk perangkat ini.', 'success');
+        showToast(
+          wantDark
+            ? 'Mode Malam aktif untuk perangkat ini.'
+            : 'Mode Terang aktif untuk perangkat ini.',
+          'success'
+        );
       }
       return;
     }
 
-    if (isLightToggle && keys.length <= 2) {
-      setDeviceDarkMode(false);
-      if (!options?.silent) {
-        showToast('Mode Terang aktif untuk perangkat ini.', 'success');
-      }
-      return;
-    }
-
-    if (!isSuperAdminAccount(currentUserRef.current)) {
+    if (!isSuperAdmin) {
       if (!options?.silent) {
         showToast('Hanya Super Admin yang dapat mengubah tema tampilan web.', 'error');
       }
       return;
     }
 
-    const normalizedPatch: Partial<ThemeSettings> = { ...newSettings };
-    if (normalizedPatch.surfaceMode === 'dark_elevated') {
-      delete normalizedPatch.surfaceMode;
-    }
-    if (normalizedPatch.surfaceThemeMode === 'dark_slate') {
-      delete normalizedPatch.surfaceThemeMode;
+    if (
+      newSettings.surfaceMode !== undefined ||
+      newSettings.surfaceThemeMode !== undefined
+    ) {
+      clearDeviceDarkOverride();
     }
 
-    const updated = { ...themeSettingsRef.current, ...normalizedPatch };
+    const updated = normalizeThemeSettings({
+      ...themeSettingsRef.current,
+      ...newSettings,
+    });
+    const effectiveDark = isDarkSurfaceMode(updated, deviceDarkOverrideRef.current);
     themeSettingsRef.current = updated;
-    applyThemeCssVariables(updated, isDeviceDarkModeRef.current);
+    applyThemeCssVariables(updated, effectiveDark);
     setThemeSettings(updated);
     localStorage.setItem('bw_theme_settings', JSON.stringify(updated));
-    if (isSuperAdminAccount(currentUserRef.current)) {
-      scheduleSchoolConfigSync();
-    }
+    scheduleSchoolConfigSync();
     if (!options?.silent) {
       showToast(
         'Tema tampilan berhasil diperbarui & disinkronkan ke semua user.',
@@ -1698,9 +1786,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setAcademicYearState(patch.academicYear);
     }
     if (patch.themeSettings) {
-      const nextTheme = { ...themeSettingsRef.current, ...patch.themeSettings };
+      if (
+        patch.themeSettings.surfaceMode !== undefined ||
+        patch.themeSettings.surfaceThemeMode !== undefined
+      ) {
+        clearDeviceDarkOverride();
+      }
+      const nextTheme = normalizeThemeSettings({
+        ...themeSettingsRef.current,
+        ...patch.themeSettings,
+      });
+      const effectiveDark = isDarkSurfaceMode(nextTheme, deviceDarkOverrideRef.current);
       themeSettingsRef.current = nextTheme;
-      applyThemeCssVariables(nextTheme, isDeviceDarkModeRef.current);
+      applyThemeCssVariables(nextTheme, effectiveDark);
       setThemeSettings(nextTheme);
       localStorage.setItem('bw_theme_settings', JSON.stringify(nextTheme));
     }
@@ -1734,10 +1832,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast('Hanya Super Admin yang dapat mereset tema tampilan web.', 'error');
       return;
     }
-    themeSettingsRef.current = INITIAL_THEME_SETTINGS;
-    applyThemeCssVariables(INITIAL_THEME_SETTINGS);
-    setThemeSettings(INITIAL_THEME_SETTINGS);
-    localStorage.setItem('bw_theme_settings', JSON.stringify(INITIAL_THEME_SETTINGS));
+    clearDeviceDarkOverride();
+    const defaultNormalized = normalizeThemeSettings(INITIAL_THEME_SETTINGS);
+    themeSettingsRef.current = defaultNormalized;
+    applyThemeCssVariables(defaultNormalized, false);
+    setThemeSettings(defaultNormalized);
+    localStorage.setItem('bw_theme_settings', JSON.stringify(defaultNormalized));
     scheduleSchoolConfigSync();
     showToast('Tema tampilan direset ke bawaan & disinkronkan ke semua user.', 'info');
   };

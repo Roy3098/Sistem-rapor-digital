@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar';
 import { BottomNav } from './components/BottomNav';
 import { ToastContainer } from './components/ToastContainer';
 import { ThemeModal } from './components/ThemeModal';
+import { OfflineIndicator } from './components/PWAInstallButton';
 import { AuthView } from './views/AuthView';
 import { DashboardView } from './views/DashboardView';
 import { GradesView } from './views/GradesView';
@@ -331,6 +332,7 @@ const MainContent: React.FC = () => {
       style={{ backgroundColor: 'var(--page-bg, #f8fafc)' }}
     >
       <ToastContainer />
+      <OfflineIndicator />
       <ThemeModal />
 
       {/* Layout Option 1: Modern Sidebar Workspace */}

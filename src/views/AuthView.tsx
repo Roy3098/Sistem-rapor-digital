@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { BrandLogoIcon } from '../components/BrandLogoIcon';
+import { PWAInstallButton } from '../components/PWAInstallButton';
 import { Lock, User, KeyRound, Sparkles, ArrowLeft, ShieldCheck } from 'lucide-react';
 
 export const AuthView: React.FC = () => {
@@ -68,7 +69,13 @@ export const AuthView: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col justify-center items-center p-4 relative overflow-hidden">
+    <div
+      className="min-h-screen bg-slate-900 flex flex-col justify-center items-center p-4 relative overflow-hidden"
+      style={{
+        background:
+          'radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--brand-primary, #047857) 35%, #0f172a) 0%, #0f172a 75%)',
+      }}
+    >
       {/* Background Architectural Accent */}
       <div className="absolute inset-0 opacity-20 pointer-events-none">
         <img
@@ -120,7 +127,7 @@ export const AuthView: React.FC = () => {
                     placeholder="Masukkan username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:bg-white focus:outline-none transition-all font-medium"
+                    className={`w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 ${themeClasses.focusRing} focus:bg-white focus:outline-none transition-all font-medium`}
                   />
                 </div>
               </div>
@@ -137,7 +144,7 @@ export const AuthView: React.FC = () => {
                     placeholder="Masukkan password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:bg-white focus:outline-none transition-all font-medium"
+                    className={`w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 ${themeClasses.focusRing} focus:bg-white focus:outline-none transition-all font-medium`}
                   />
                 </div>
               </div>
@@ -163,7 +170,7 @@ export const AuthView: React.FC = () => {
               <button
                 type="button"
                 onClick={handleGoogleLogin}
-                className="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-xs transition-colors flex items-center justify-center gap-2.5"
+                className="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-xs transition-colors flex items-center justify-center gap-2.5 cursor-pointer"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24">
                   <path
@@ -193,7 +200,7 @@ export const AuthView: React.FC = () => {
                     setErrorMsg('');
                     setMode('register');
                   }}
-                  className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors"
+                  className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
                 >
                   Daftar Akun Pendidik Baru
                 </button>
@@ -204,10 +211,14 @@ export const AuthView: React.FC = () => {
                     setErrorMsg('');
                     setMode('forgot');
                   }}
-                  className="w-full py-1 text-xs text-emerald-700 hover:text-emerald-900 font-medium hover:underline block text-center"
+                  className={`w-full py-1 text-xs ${themeClasses.primaryText} hover:opacity-80 font-medium hover:underline block text-center cursor-pointer`}
                 >
                   Lupa Password?
                 </button>
+
+                <div className="pt-1">
+                  <PWAInstallButton variant="auth" />
+                </div>
               </div>
             </form>
           )}
@@ -220,7 +231,7 @@ export const AuthView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setMode('login')}
-                  className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1"
+                  className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer"
                 >
                   <ArrowLeft className="w-3 h-3" />
                   <span>Kembali</span>
@@ -237,7 +248,7 @@ export const AuthView: React.FC = () => {
                   placeholder="Pilih username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className={`w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 ${themeClasses.focusRing} focus:outline-none`}
                 />
               </div>
 
@@ -251,7 +262,7 @@ export const AuthView: React.FC = () => {
                   placeholder="Contoh: Ust. Ahmad Fauzi, S.Pd."
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className={`w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 ${themeClasses.focusRing} focus:outline-none`}
                 />
               </div>
 
@@ -265,7 +276,7 @@ export const AuthView: React.FC = () => {
                   placeholder="Minimal 6 karakter"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className={`w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 ${themeClasses.focusRing} focus:outline-none`}
                 />
               </div>
 
@@ -279,13 +290,13 @@ export const AuthView: React.FC = () => {
                   placeholder="Ulangi kata sandi"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className={`w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 ${themeClasses.focusRing} focus:outline-none`}
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3 bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-md transition-all mt-2"
+                className={`w-full py-3 ${themeClasses.primary} ${themeClasses.primaryHover} text-white font-bold text-xs rounded-xl shadow-md transition-all mt-2 cursor-pointer`}
               >
                 ✅ Daftar Sekarang
               </button>
@@ -293,7 +304,7 @@ export const AuthView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setMode('login')}
-                className="w-full py-2 text-xs font-semibold text-slate-600 hover:text-slate-900"
+                className="w-full py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
               >
                 Sudah punya akun? Masuk di sini
               </button>
@@ -308,7 +319,7 @@ export const AuthView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setMode('login')}
-                  className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1"
+                  className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer"
                 >
                   <ArrowLeft className="w-3 h-3" />
                   <span>Kembali</span>
@@ -325,7 +336,7 @@ export const AuthView: React.FC = () => {
                   placeholder="Masukkan username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className={`w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 ${themeClasses.focusRing} focus:outline-none`}
                 />
               </div>
 
@@ -339,7 +350,7 @@ export const AuthView: React.FC = () => {
                   placeholder="Minimal 6 karakter"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className={`w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 ${themeClasses.focusRing} focus:outline-none`}
                 />
               </div>
 
@@ -353,13 +364,13 @@ export const AuthView: React.FC = () => {
                   placeholder="Ulangi kata sandi baru"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className={`w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:ring-2 ${themeClasses.focusRing} focus:outline-none`}
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3 bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-md transition-all mt-2"
+                className={`w-full py-3 ${themeClasses.primary} ${themeClasses.primaryHover} text-white font-bold text-xs rounded-xl shadow-md transition-all mt-2 cursor-pointer`}
               >
                 Reset Kata Sandi
               </button>
@@ -367,7 +378,7 @@ export const AuthView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setMode('login')}
-                className="w-full py-2 text-xs font-semibold text-slate-600 hover:text-slate-900"
+                className="w-full py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
               >
                 Batal & Kembali ke Login
               </button>
@@ -376,7 +387,8 @@ export const AuthView: React.FC = () => {
         </div>
 
         <p className="text-[11px] text-slate-400 text-center mt-6">
-          © {new Date().getFullYear()} Sistem Rapor Digital · Pesantren & Madrasah Baiturrahman
+          © {new Date().getFullYear()} {siteSettings.appName || 'Sistem Rapor Digital'} ·{' '}
+          {siteSettings.schoolName || 'Pesantren & Madrasah Baiturrahman'}
         </p>
       </div>
     </div>

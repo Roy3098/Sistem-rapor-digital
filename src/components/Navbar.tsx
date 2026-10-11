@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp, AppView } from '../context/AppContext';
 import { BrandLogoIcon } from './BrandLogoIcon';
+import { PWAInstallButton } from './PWAInstallButton';
 import { getHeaderStyles, isDarkSurfaceMode } from '../utils/theme';
 import {
   LayoutDashboard,
@@ -160,6 +161,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
 
           {/* Zone 3: Actions & Profile */}
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* In-App PWA Install Button */}
+            <PWAInstallButton variant="navbar" isDarkBg={isHeaderDarkBg} />
+
             {/* Quick Mode Malam / Mode Terang Toggle */}
             <button
               type="button"
@@ -316,6 +320,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
                         <UserIcon className="w-4 h-4 text-slate-400" />
                         <span>Profil & Pengaturan Akun</span>
                       </button>
+
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <PWAInstallButton
+                          variant="menu"
+                          isDarkBg={isDarkSurface}
+                          onAfterClick={() => setDropdownOpen(false)}
+                        />
+                      </div>
 
                       <button
                         type="button"

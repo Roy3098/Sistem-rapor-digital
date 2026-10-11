@@ -312,7 +312,66 @@ export function isDarkSurfaceMode(
   theme?: ThemeSettings,
   isDeviceDarkOverride?: boolean | null
 ): boolean {
-  return isDeviceDarkModeActive(isDeviceDarkOverride);
+  if (typeof isDeviceDarkOverride === 'boolean') {
+    return isDeviceDarkOverride;
+  }
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('bw_device_dark_mode');
+    if (stored === 'dark') return true;
+    if (stored === 'light') return false;
+  }
+  if (theme?.surfaceMode === 'dark_elevated' || theme?.surfaceThemeMode === 'dark_slate') {
+    return true;
+  }
+  return false;
+}
+
+export function normalizeThemeSettings(theme: ThemeSettings): ThemeSettings {
+  const font = (theme.fontFamily || theme.webFontFamily || 'jakarta') as NonNullable<ThemeSettings['fontFamily']>;
+  const tracking = (theme.headingLetterSpacing || theme.letterSpacingStyle || 'tight') as NonNullable<ThemeSettings['headingLetterSpacing']>;
+  const lh = (theme.lineHeight || theme.lineHeightStyle || 'normal') as NonNullable<ThemeSettings['lineHeight']>;
+  const card = (theme.cardStyle || theme.cardSurfaceStyle || 'bordered') as NonNullable<ThemeSettings['cardStyle']>;
+  const tbl = (theme.tableStyle || theme.webTableStyle || 'clean') as NonNullable<ThemeSettings['tableStyle']>;
+  const pat = (theme.bgPattern || theme.pagePattern || 'none') as NonNullable<ThemeSettings['bgPattern']>;
+  const inp = (theme.inputStyle || theme.inputFieldStyle || 'outlined') as NonNullable<ThemeSettings['inputStyle']>;
+  const navInd = (theme.activeTabIndicator || theme.navActiveIndicator || 'pill') as NonNullable<ThemeSettings['activeTabIndicator']>;
+  const anim = (theme.animationStyle || theme.animationSpeed || 'fade') as NonNullable<ThemeSettings['animationStyle']>;
+  const surf = (theme.surfaceMode ||
+    (theme.surfaceThemeMode === 'dark_slate'
+      ? 'dark_elevated'
+      : theme.surfaceThemeMode === 'soft_sepia'
+      ? 'sepia_warm'
+      : 'light')) as NonNullable<ThemeSettings['surfaceMode']>;
+  const surfLegacy: NonNullable<ThemeSettings['surfaceThemeMode']> =
+    surf === 'dark_elevated'
+      ? 'dark_slate'
+      : surf === 'sepia_warm'
+      ? 'soft_sepia'
+      : 'light';
+
+  return {
+    ...theme,
+    surfaceMode: surf,
+    surfaceThemeMode: surfLegacy,
+    fontFamily: font,
+    webFontFamily: font as ThemeSettings['webFontFamily'],
+    headingLetterSpacing: tracking,
+    letterSpacingStyle: tracking as ThemeSettings['letterSpacingStyle'],
+    lineHeight: lh,
+    lineHeightStyle: lh as ThemeSettings['lineHeightStyle'],
+    cardStyle: card,
+    cardSurfaceStyle: card as ThemeSettings['cardSurfaceStyle'],
+    tableStyle: tbl,
+    webTableStyle: tbl as ThemeSettings['webTableStyle'],
+    bgPattern: pat,
+    pagePattern: pat as ThemeSettings['pagePattern'],
+    inputStyle: inp,
+    inputFieldStyle: inp as ThemeSettings['inputFieldStyle'],
+    activeTabIndicator: navInd,
+    navActiveIndicator: navInd as ThemeSettings['navActiveIndicator'],
+    animationStyle: anim,
+    animationSpeed: anim as ThemeSettings['animationSpeed'],
+  };
 }
 
 export function applyThemeCssVariables(

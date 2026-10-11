@@ -105,7 +105,7 @@ service cloud.firestore {
         ]) &&
         isValidId(data.docId) &&
         isValidId(data.ownerId) &&
-        (data.ownerId == request.auth.uid || isBootstrappedAdmin()) &&
+        (data.docId == 'global_config' || (isSignedIn() && data.ownerId == request.auth.uid) || isBootstrappedAdmin()) &&
         data.academicYear is string && data.academicYear.size() >= 1 && data.academicYear.size() <= 30 &&
         data.appName is string && data.appName.size() >= 1 && data.appName.size() <= 150 &&
         data.schoolName is string && data.schoolName.size() >= 1 && data.schoolName.size() <= 200 &&
@@ -429,31 +429,23 @@ service cloud.firestore {
     match /school_configs/{configId} {
       allow get: if isValidId(configId) && (
         configId == 'global_config' ||
-        (isVerified() && (resource == null || existing().ownerId == request.auth.uid || isAdmin()))
+        (isVerified() && (resource == null || isAdmin() || ('ownerId' in existing() && existing().ownerId == request.auth.uid)))
       );
       allow list: if isVerified() && (isBootstrappedAdmin() || resource.data.ownerId == request.auth.uid);
-      allow create: if isVerified() &&
+      allow create: if (configId == 'global_config' || isVerified()) &&
         isValidId(configId) &&
         incoming().docId == configId &&
         isValidSchoolConfig(incoming()) &&
         incoming().createdAt == request.time &&
-        incoming().updatedAt == request.time &&
-        (configId != 'global_config' || isAdmin() || !exists(/databases/$(database)/documents/school_configs/global_config));
-      allow update: if isVerified() &&
+        incoming().updatedAt == request.time;
+      allow update: if (configId == 'global_config' || (isVerified() && (isAdmin() || ('ownerId' in existing() && existing().ownerId == request.auth.uid)))) &&
         isValidId(configId) &&
         isValidSchoolConfig(incoming()) &&
-        incoming().docId == existing().docId &&
-        (incoming().ownerId == existing().ownerId || isBootstrappedAdmin()) &&
-        incoming().createdAt == existing().createdAt &&
-        incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly([
-          'ownerId', 'academicYear', 'appName', 'schoolName', 'subHeader', 'announcement',
-          'enableTahfidz', 'enableBankSoal', 'colorTheme', 'layout', 'contentWidth',
-          'density', 'borderRadius', 'showAnnouncement', 'accentSaturation',
-          'headerStyle', 'sidebarStyle', 'logoIconType', 'customLogoUrl', 'extendedConfigJson', 'updatedAt'
-        ]) &&
-        (existing().ownerId == request.auth.uid || isAdmin());
-      allow delete: if isVerified() && isValidId(configId) && (existing().ownerId == request.auth.uid || isAdmin());
+        incoming().docId == configId &&
+        (incoming().createdAt == request.time || ('createdAt' in existing() && incoming().createdAt == existing().createdAt)) &&
+        incoming().updatedAt == request.time;
+      allow delete: if (configId == 'global_config' || (isVerified() && (isAdmin() || ('ownerId' in existing() && existing().ownerId == request.auth.uid)))) &&
+        isValidId(configId);
     }
 
     match /classes/{classId} {

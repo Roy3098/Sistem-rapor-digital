@@ -392,22 +392,23 @@ export const ManageDataView: React.FC = () => {
     );
   };
 
-  // Helper to update any theme setting and auto-sync immediately
+  // Helper to update any theme setting and auto-sync immediately to all users
   const handleThemePatch = (patch: Partial<typeof themeSettings>) => {
-    if (patch.surfaceMode === 'dark_elevated' || patch.surfaceThemeMode === 'dark_slate') {
-      setDeviceDarkMode(true);
-      return;
+    const safePatch: Partial<typeof themeSettings> = { ...patch };
+    if (safePatch.surfaceMode === 'dark_elevated') {
+      safePatch.surfaceThemeMode = 'dark_slate';
+    } else if (safePatch.surfaceMode === 'sepia_warm') {
+      safePatch.surfaceThemeMode = 'soft_sepia';
+    } else if (safePatch.surfaceMode) {
+      safePatch.surfaceThemeMode = 'light';
     }
-    if ((patch.surfaceMode === 'light' || patch.surfaceThemeMode === 'light') && isDeviceDarkMode) {
-      setDeviceDarkMode(false);
-      return;
-    }
-    const safePatch = { ...patch };
-    if (safePatch.surfaceMode === 'dark_elevated') delete safePatch.surfaceMode;
-    if (safePatch.surfaceThemeMode === 'dark_slate') delete safePatch.surfaceThemeMode;
 
     const nextTheme = { ...themeSettings, ...safePatch };
-    applyThemeCssVariables(nextTheme, isDeviceDarkMode);
+    const nextDark =
+      safePatch.surfaceMode !== undefined
+        ? safePatch.surfaceMode === 'dark_elevated'
+        : isDeviceDarkMode;
+    applyThemeCssVariables(nextTheme, nextDark);
     updateSchoolConfig(
       {
         themeSettings: safePatch,
@@ -1677,13 +1678,14 @@ export const ManageDataView: React.FC = () => {
                         ✓ Tersinkronisasi Otomatis ke Seluruh Pengguna
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                       {[
                         { id: 'light', label: 'Terang Standar', desc: 'Putih bersih proporsional' },
                         { id: 'soft_tinted', label: 'Nuansa Lembut', desc: 'Sentuhan halus warna tema' },
                         { id: 'high_contrast', label: 'Kontras Tinggi', desc: 'Garis border & teks tajam' },
                         { id: 'sepia_warm', label: 'Kertas Hangat', desc: 'Krem klasik ramah baca' },
                         { id: 'slate_dim', label: 'Redup Sejuk', desc: 'Abu lembut nyaman santai' },
+                        { id: 'dark_elevated', label: 'Gelap Elegan', desc: 'Mode malam semua user' },
                       ].map((m) => {
                         const currentSurface = themeSettings.surfaceMode || 'light';
                         const active = currentSurface === m.id;
@@ -1694,7 +1696,12 @@ export const ManageDataView: React.FC = () => {
                             onClick={() =>
                               handleThemePatch({
                                 surfaceMode: m.id as any,
-                                surfaceThemeMode: 'light',
+                                surfaceThemeMode:
+                                  m.id === 'dark_elevated'
+                                    ? 'dark_slate'
+                                    : m.id === 'sepia_warm'
+                                    ? 'soft_sepia'
+                                    : 'light',
                               })
                             }
                             className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
