@@ -586,6 +586,12 @@ export function applyThemeCssVariables(
   } else if (customStyleEl) {
     customStyleEl.textContent = '';
   }
+
+  // Keep browser toolbar theme-color and favicon in sync with active theme & logo
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeColorMeta) {
+    themeColorMeta.setAttribute('content', baseHex);
+  }
 }
 
 export interface ReportThemeStyles {

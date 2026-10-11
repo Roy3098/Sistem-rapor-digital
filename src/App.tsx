@@ -139,6 +139,7 @@ const MainContent: React.FC = () => {
     speedOptions.find((s) => s.id === currentSpeedId) || speedOptions[2];
 
   const handleCycleSpeed = () => {
+    if (!isSuperAdmin) return;
     const idx = speedOptions.findIndex((s) => s.id === currentSpeedId);
     const nextOption = speedOptions[(idx + 1) % speedOptions.length];
     updateSchoolConfig(
@@ -210,7 +211,7 @@ const MainContent: React.FC = () => {
           >
             <div
               className="animate-announcement-marquee items-center"
-              data-paused={isTickerPaused ? 'true' : 'false'}
+              data-paused={isSuperAdmin && isTickerPaused ? 'true' : 'false'}
             >
               {[0, 1].map((copyIdx) => (
                 <div
@@ -270,40 +271,40 @@ const MainContent: React.FC = () => {
             </div>
           </div>
 
-          {/* Right Controls: Speed Cycler, Pause/Play & Superadmin Shortcut */}
-          <div
-            className={`flex items-center gap-1.5 shrink-0 z-10 pl-2 border-l ${
-              isDarkSurface ? 'border-slate-700/80' : 'border-slate-200/80'
-            }`}
-          >
-            <button
-              type="button"
-              onClick={handleCycleSpeed}
-              className={`inline-flex items-center gap-1 h-6 px-2 rounded-md border text-[10px] font-bold tabular-nums transition-colors cursor-pointer ${
-                isDarkSurface
-                  ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
-                  : 'bg-slate-100 hover:bg-slate-200/80 border-slate-200/80 text-slate-600 hover:text-slate-900'
+          {/* Right Controls: Speed Cycler, Pause/Play & Superadmin Shortcut (Superadmin Only) */}
+          {isSuperAdmin && (
+            <div
+              className={`flex items-center gap-1.5 shrink-0 z-10 pl-2 border-l ${
+                isDarkSurface ? 'border-slate-700/80' : 'border-slate-200/80'
               }`}
-              title={`Kecepatan Running Pengumuman: ${currentSpeedMeta.fullLabel} (Klik untuk ubah)`}
             >
-              <Gauge className="w-3 h-3 shrink-0" />
-              <span>{currentSpeedMeta.shortLabel}</span>
-            </button>
+              <button
+                type="button"
+                onClick={handleCycleSpeed}
+                className={`inline-flex items-center gap-1 h-6 px-2 rounded-md border text-[10px] font-bold tabular-nums transition-colors cursor-pointer ${
+                  isDarkSurface
+                    ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                    : 'bg-slate-100 hover:bg-slate-200/80 border-slate-200/80 text-slate-600 hover:text-slate-900'
+                }`}
+                title={`Kecepatan Running Pengumuman: ${currentSpeedMeta.fullLabel} (Klik untuk ubah)`}
+              >
+                <Gauge className="w-3 h-3 shrink-0" />
+                <span>{currentSpeedMeta.shortLabel}</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setIsTickerPaused((prev) => !prev)}
-              className={`inline-flex items-center justify-center w-6 h-6 rounded-md border transition-colors cursor-pointer ${
-                isDarkSurface
-                  ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
-                  : 'bg-slate-100 hover:bg-slate-200/80 border-slate-200/80 text-slate-600 hover:text-slate-900'
-              }`}
-              title={isTickerPaused ? 'Jalankan Teks Pengumuman' : 'Jeda Teks Pengumuman'}
-            >
-              {isTickerPaused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
-            </button>
+              <button
+                type="button"
+                onClick={() => setIsTickerPaused((prev) => !prev)}
+                className={`inline-flex items-center justify-center w-6 h-6 rounded-md border transition-colors cursor-pointer ${
+                  isDarkSurface
+                    ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                    : 'bg-slate-100 hover:bg-slate-200/80 border-slate-200/80 text-slate-600 hover:text-slate-900'
+                }`}
+                title={isTickerPaused ? 'Jalankan Teks Pengumuman' : 'Jeda Teks Pengumuman'}
+              >
+                {isTickerPaused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
+              </button>
 
-            {isSuperAdmin && (
               <button
                 type="button"
                 onClick={openSuperAdminAnnouncements}
@@ -317,8 +318,8 @@ const MainContent: React.FC = () => {
                 <Settings2 className="w-3 h-3 shrink-0" />
                 <span className="hidden sm:inline">Kelola</span>
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     );

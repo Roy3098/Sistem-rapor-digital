@@ -132,7 +132,8 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                   <img
                     src="/pwa-192x192.png"
                     alt="Rapor BR Icon"
-                    className="w-11 h-11 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700"
+                    referrerPolicy="no-referrer"
+                    className="w-11 h-11 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 bg-white p-1 object-contain"
                   />
                   <div>
                     <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-tight">

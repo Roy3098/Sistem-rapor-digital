@@ -52,17 +52,22 @@ export const BrandLogoIcon: React.FC<BrandLogoIconProps> = ({
   const { themeSettings, siteSettings } = useApp();
 
   const logoType = themeSettings?.logoIconType || 'image';
-  const leftImg =
-    themeSettings?.customLogoUrl ||
-    siteSettings?.customLogoUrl ||
-    '/src/assets/images/logo_baiturrahman_1791464090153.jpg';
+  const normalizeLogoSrc = (url?: string) => {
+    if (!url || url === '/src/assets/images/logo_baiturrahman_1791464090153.jpg') {
+      return '/app-logo.png';
+    }
+    return url;
+  };
 
-  const rightImg =
-    themeSettings?.customRightLogoUrl ||
-    siteSettings?.customRightLogoUrl ||
-    leftImg;
+  const leftImg = normalizeLogoSrc(
+    themeSettings?.customLogoUrl || siteSettings?.customLogoUrl
+  );
 
-  const activeImg = customUrlOverride || (variant === 'right' ? rightImg : leftImg);
+  const rightImg = normalizeLogoSrc(
+    themeSettings?.customRightLogoUrl || siteSettings?.customRightLogoUrl || leftImg
+  );
+
+  const activeImg = customUrlOverride ? normalizeLogoSrc(customUrlOverride) : (variant === 'right' ? rightImg : leftImg);
 
   const iconSizes = {
     sm: 'w-4 h-4',
@@ -130,8 +135,7 @@ export const BrandLogoIcon: React.FC<BrandLogoIconProps> = ({
         className={imgClassName}
         referrerPolicy="no-referrer"
         onError={(e) => {
-          (e.target as HTMLImageElement).src =
-            '/src/assets/images/logo_baiturrahman_1791464090153.jpg';
+          (e.target as HTMLImageElement).src = '/app-logo.png';
         }}
       />
     </div>

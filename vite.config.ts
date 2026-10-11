@@ -13,6 +13,7 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         includeAssets: [
           'icon.svg',
+          'app-logo.png',
           'apple-touch-icon.png',
           'pwa-192x192.png',
           'pwa-512x512.png',
@@ -25,7 +26,7 @@ export default defineConfig(() => {
           description:
             'Sistem Pengelolaan Nilai, Rapor, Tahfidz, dan Bank Soal Ujian Baiturrahman',
           theme_color: '#047857',
-          background_color: '#0f172a',
+          background_color: '#ffffff',
           display: 'standalone',
           orientation: 'any',
           start_url: '/',

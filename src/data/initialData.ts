@@ -83,7 +83,7 @@ export const INITIAL_THEME_SETTINGS: ThemeSettings = {
   headerStyle: 'glass',
   sidebarStyle: 'light',
   logoIconType: 'image',
-  customLogoUrl: '/src/assets/images/logo_baiturrahman_1791464090153.jpg',
+  customLogoUrl: '/app-logo.png',
   webFontFamily: 'jakarta',
   fontScale: 'normal',
   cardSurfaceStyle: 'bordered',
@@ -96,7 +96,7 @@ export const INITIAL_THEME_SETTINGS: ThemeSettings = {
   showHeroBanner: true,
   showFooter: true,
   stickyHeader: true,
-  customRightLogoUrl: '/src/assets/images/logo_baiturrahman_1791464090153.jpg',
+  customRightLogoUrl: '/app-logo.png',
   reportShowLeftLogo: true,
   reportShowRightLogo: true,
   reportLogoSize: 'md',
@@ -196,7 +196,7 @@ export const SUPERADMIN_USER: User = {
   username: 'superadmin',
   fullName: 'Super Administrator',
   email: 'admin.baiturrahman@gmail.com',
-  avatarUrl: '/src/assets/images/logo_baiturrahman_1791464090153.jpg',
+  avatarUrl: '/app-logo.png',
   role: 'superadmin',
   joinedDate: '01/01/2024',
 };
@@ -255,8 +255,8 @@ export const INITIAL_SITE_SETTINGS: SiteSettings = {
   watermarkText: 'DOKUMEN RESMI',
   kkmDefault: 70,
   footerText: 'Evaluasi Akademik, Rapor Digital & Tahfidz',
-  customLogoUrl: '/src/assets/images/logo_baiturrahman_1791464090153.jpg',
-  customRightLogoUrl: '/src/assets/images/logo_baiturrahman_1791464090153.jpg',
+  customLogoUrl: '/app-logo.png',
+  customRightLogoUrl: '/app-logo.png',
   reportCustomTitle: 'LAPORAN HASIL EVALUASI BELAJAR SANTRI (RAPOR DIGITAL)',
 };
 
