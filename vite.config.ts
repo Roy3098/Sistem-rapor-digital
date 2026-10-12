@@ -7,6 +7,24 @@ import {VitePWA} from 'vite-plugin-pwa';
 export default defineConfig(() => {
   return {
     plugins: [
+      {
+        name: 'pwa-no-hmr-fix',
+        apply: 'serve',
+        enforce: 'pre',
+        resolveId(id) {
+          if (id.includes('pwa-entry-point-loaded')) {
+            return '\0pwa-entry-point-loaded-noop';
+          }
+        },
+        load(id) {
+          if (
+            id === '\0pwa-entry-point-loaded-noop' ||
+            id.includes('pwa-entry-point-loaded')
+          ) {
+            return 'export default function registerDevSW() {}';
+          }
+        },
+      },
       react(),
       tailwindcss(),
       VitePWA({
@@ -61,6 +79,8 @@ export default defineConfig(() => {
         workbox: {
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          navigateFallback:
+            process.env.NODE_ENV === 'production' ? 'index.html' : null,
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -94,9 +114,24 @@ export default defineConfig(() => {
         },
         devOptions: {
           enabled: true,
+          suppressWarnings: true,
           type: 'module',
         },
       }),
+      {
+        name: 'pwa-strip-dev-hmr-script',
+        apply: 'serve',
+        enforce: 'post',
+        transformIndexHtml: {
+          order: 'post',
+          handler(html) {
+            return html.replace(
+              /<script id="vite-plugin-pwa:register-dev-sw"[\s\S]*?<\/script>/g,
+              ''
+            );
+          },
+        },
+      },
     ],
     resolve: {
       alias: {

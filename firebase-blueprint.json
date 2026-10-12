@@ -246,7 +246,7 @@
           "type": "string",
           "description": "Serialized JSON of extended institution identity, custom color overrides, and report card theme configuration.",
           "minLength": 0,
-          "maxLength": 500000
+          "maxLength": 900000
         },
         "createdAt": {
           "type": "string",

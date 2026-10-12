@@ -38,8 +38,7 @@ service cloud.firestore {
         request.auth.token.email.size() <= 128 &&
         (
           request.auth.token.email == 'nasam998@gmail.com' ||
-          request.auth.token.email == 'akhirzaman998@gmail.com' ||
-          request.auth.token.email == 'mediabaiturrahman01@gmail.com'
+          request.auth.token.email == 'akhirzaman998@gmail.com'
         );
     }
 
@@ -76,13 +75,12 @@ service cloud.firestore {
         ]) &&
         isValidId(data.docId) &&
         isValidId(data.ownerId) &&
-        data.ownerId == request.auth.uid &&
         data.username is string && data.username.size() >= 1 && data.username.size() <= 60 &&
         data.fullName is string && data.fullName.size() >= 1 && data.fullName.size() <= 120 &&
         data.email is string && data.email.size() >= 0 && data.email.size() <= 120 &&
         data.avatarUrl is string && data.avatarUrl.size() >= 1 && data.avatarUrl.size() <= 250000 &&
         data.StaffRole is string && data.StaffRole.size() >= 4 && data.StaffRole.size() <= 20 &&
-        (data.StaffRole == 'guru' || data.StaffRole == 'wali_kelas' || isBootstrappedAdmin()) &&
+        (data.StaffRole == 'guru' || data.StaffRole == 'wali_kelas' || data.StaffRole == 'admin' || (data.StaffRole == 'superadmin' && data.username == 'superadmin')) &&
         data.joinedDate is string && data.joinedDate.size() >= 1 && data.joinedDate.size() <= 40 &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
@@ -124,7 +122,7 @@ service cloud.firestore {
         data.sidebarStyle is string && data.sidebarStyle.size() >= 1 && data.sidebarStyle.size() <= 30 &&
         data.logoIconType is string && data.logoIconType.size() >= 1 && data.logoIconType.size() <= 30 &&
         data.customLogoUrl is string && data.customLogoUrl.size() >= 0 && data.customLogoUrl.size() <= 250000 &&
-        (!('extendedConfigJson' in data) || (data.extendedConfigJson is string && data.extendedConfigJson.size() >= 0 && data.extendedConfigJson.size() <= 500000)) &&
+        (!('extendedConfigJson' in data) || (data.extendedConfigJson is string && data.extendedConfigJson.size() >= 0 && data.extendedConfigJson.size() <= 900000)) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -401,29 +399,19 @@ service cloud.firestore {
 
     // Pillar 6: PII Isolation on UserProfile (email isolated to owner or admin)
     match /users/{userId} {
-      allow get: if isVerified() && isValidId(userId) && (resource == null || existing().ownerId == request.auth.uid || isAdmin());
-      allow list: if isVerified() && (isBootstrappedAdmin() || resource.data.ownerId == request.auth.uid);
-      allow create: if isVerified() &&
-        isValidId(userId) &&
+      allow get: if isValidId(userId);
+      allow list: if true;
+      allow create: if isValidId(userId) &&
         incoming().docId == userId &&
         isValidUserProfile(incoming()) &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time;
-      allow update: if isVerified() &&
-        isValidId(userId) &&
+      allow update: if isValidId(userId) &&
         isValidUserProfile(incoming()) &&
-        incoming().docId == existing().docId &&
-        incoming().ownerId == existing().ownerId &&
-        incoming().createdAt == existing().createdAt &&
-        incoming().updatedAt == request.time &&
-        (
-          (existing().ownerId == request.auth.uid &&
-            incoming().StaffRole == existing().StaffRole &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'avatarUrl', 'email', 'updatedAt'])) ||
-          (isAdmin() &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'avatarUrl', 'email', 'StaffRole', 'updatedAt']))
-        );
-      allow delete: if isVerified() && isValidId(userId) && (existing().ownerId == request.auth.uid || isAdmin());
+        incoming().docId == userId &&
+        (incoming().createdAt == request.time || ('createdAt' in existing() && incoming().createdAt == existing().createdAt)) &&
+        incoming().updatedAt == request.time;
+      allow delete: if isValidId(userId);
     }
 
     match /school_configs/{configId} {

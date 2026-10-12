@@ -20,6 +20,7 @@ import { Megaphone, Settings2, Pause, Play, Gauge } from 'lucide-react';
 const MainContent: React.FC = () => {
   const {
     currentUser,
+    isSuperAdmin,
     currentView,
     siteSettings,
     themeSettings,
@@ -37,9 +38,6 @@ const MainContent: React.FC = () => {
   if (!currentUser) {
     return <AuthView />;
   }
-
-  const isSuperAdmin =
-    currentUser.role === 'superadmin' || currentUser.username.toLowerCase() === 'superadmin';
 
   const activeAnnouncements = [...announcements.filter((a) => a.isActive)].sort((a, b) =>
     a.isPinned === b.isPinned ? 0 : a.isPinned ? -1 : 1

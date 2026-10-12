@@ -31,6 +31,9 @@ import {
   QuestionItem,
   SiteSettings,
   ThemeSettings,
+  StudentAttendanceRecord,
+  TeacherAttendanceRecord,
+  TeachingAssignment,
 } from '../types';
 import { normalizeThemeSettings } from '../utils/theme';
 
@@ -43,6 +46,37 @@ function uidPrefix(uid: string): string {
 }
 
 export const GLOBAL_SCHOOL_CONFIG_DOC_ID = 'global_config';
+
+export const AUTHORIZED_SUPERADMIN_EMAILS = [
+  'akhirzaman998@gmail.com',
+  'nasam998@gmail.com',
+] as const;
+
+export const RESERVED_SUPERADMIN_USERNAMES = [
+  'superadmin',
+  'super_admin',
+  'super-admin',
+  'root',
+  'owner',
+  'master',
+  'administrator',
+] as const;
+
+export function isAuthorizedSuperAdminEmail(email?: string | null): boolean {
+  if (!email || typeof email !== 'string') return false;
+  return (AUTHORIZED_SUPERADMIN_EMAILS as readonly string[]).includes(
+    email.toLowerCase().trim()
+  );
+}
+
+export function isReservedSuperAdminUsername(username?: string | null): boolean {
+  if (!username || typeof username !== 'string') return false;
+  const clean = username.toLowerCase().trim();
+  return (
+    (RESERVED_SUPERADMIN_USERNAMES as readonly string[]).includes(clean) ||
+    clean.includes('superadmin')
+  );
+}
 
 export function getSchoolConfigDocId(uid: string): string {
   return sanitizeId(`cfg_${uidPrefix(uid)}`);
@@ -63,7 +97,7 @@ export function normalizeUserId(rawId: string, username?: string): string {
     .replace(/^(usr_[a-zA-Z0-9]+_)+/, '');
 
   // If stripped is still a truncated usr_<uidPrefix> stub or empty/too long, derive a clean ID from username
-  if (!stripped || stripped.startsWith('usr_') || stripped.length > 48) {
+  if (!stripped || stripped.startsWith('usr_') || stripped.length > 48 || stripped === 'usr-superadmin') {
     const slug = cleanUsername.replace(/[^a-z0-9]/g, '').slice(0, 24);
     return slug ? `usr-${slug}` : `usr-${Date.now()}`;
   }
@@ -71,46 +105,273 @@ export function normalizeUserId(rawId: string, username?: string): string {
   return sanitizeId(stripped, 'usr');
 }
 
+export function isAuthorizedSuperAdminUser(user?: User | null): boolean {
+  if (!user || typeof user !== 'object') return false;
+  const cleanUsername = String(user.username || '')
+    .toLowerCase()
+    .trim();
+  const cleanEmail = String(user.email || '')
+    .toLowerCase()
+    .trim();
+  const cleanId = normalizeUserId(user.id, user.username);
+
+  if (
+    cleanUsername === 'superadmin' &&
+    cleanId === 'usr-superadmin' &&
+    user.role === 'superadmin'
+  ) {
+    return true;
+  }
+
+  if (user.role === 'superadmin' && isAuthorizedSuperAdminEmail(cleanEmail)) {
+    return true;
+  }
+
+  return false;
+}
+
+const DEFAULT_AVATAR_URL = '/src/assets/images/avatar_muhammad_siroj_1791464103883.jpg';
+
 export function normalizeUserRecord(user: User): User {
+  const cleanUsername = String(user.username || '')
+    .toLowerCase()
+    .trim();
+  const cleanEmail = String(user.email || '').trim();
+  const cleanId = normalizeUserId(user.id, cleanUsername);
+
+  // Strictly enforce that ONLY the official 'superadmin' account can hold 'superadmin' role
+  let safeRole: User['role'] = user.role || 'guru';
+  if (cleanUsername === 'superadmin') {
+    safeRole = 'superadmin';
+  } else if (safeRole === 'superadmin') {
+    safeRole = 'guru';
+  } else if (safeRole !== 'wali_kelas' && safeRole !== 'guru' && safeRole !== 'admin') {
+    safeRole = 'guru';
+  }
+
+  const lowerEmail = cleanEmail.toLowerCase();
+  const isGoogleInferred =
+    user.authProvider === 'google' ||
+    Boolean(user.googleUid) ||
+    (cleanUsername !== 'superadmin' &&
+      (lowerEmail.endsWith('@gmail.com') ||
+        lowerEmail.endsWith('@googlemail.com') ||
+        String(user.avatarUrl || '').includes('googleusercontent.com')));
+
   return {
     ...user,
-    id: normalizeUserId(user.id, user.username),
+    id: cleanUsername === 'superadmin' ? 'usr-superadmin' : cleanId,
+    username: cleanUsername || 'guru',
+    fullName: String(user.fullName || user.username || 'Pendidik').trim(),
+    email:
+      cleanUsername === 'superadmin' && !isAuthorizedSuperAdminEmail(cleanEmail)
+        ? 'akhirzaman998@gmail.com'
+        : cleanEmail,
+    avatarUrl: user.avatarUrl || DEFAULT_AVATAR_URL,
+    role: safeRole,
+    joinedDate: user.joinedDate || new Date().toLocaleDateString('id-ID'),
+    authProvider: isGoogleInferred ? 'google' : user.authProvider || 'local',
+    ...(user.googleUid ? { googleUid: String(user.googleUid) } : {}),
+    ...(user.password ? { password: String(user.password) } : {}),
   };
 }
 
-export function normalizeUsersList(users: User[], fallbackUsers: User[]): User[] {
-  const source = Array.isArray(users) && users.length > 0 ? users : fallbackUsers;
-  const byUsername = new Map<string, User>();
+export function buildGoogleUserRecord(
+  fbUser: {
+    uid: string;
+    email?: string | null;
+    displayName?: string | null;
+    photoURL?: string | null;
+  },
+  existingUsers: User[],
+  defaultRole: User['role'] = 'guru'
+): User {
+  const email = (fbUser.email || `${fbUser.uid.slice(0, 8).toLowerCase()}@gmail.com`)
+    .toLowerCase()
+    .trim();
 
-  source.forEach((u) => {
-    if (!u || typeof u.username !== 'string') return;
-    const key = u.username.toLowerCase().trim();
-    if (!key) return;
-    byUsername.set(key, normalizeUserRecord(u));
-  });
+  // 1. Match existing non-superadmin account by exact email or googleUid
+  const existingByEmail = existingUsers.find(
+    (u) =>
+      u.username !== 'superadmin' &&
+      ((u.email && u.email.toLowerCase().trim() === email) ||
+        (u.googleUid && u.googleUid === fbUser.uid))
+  );
 
-  // Ensure baseline accounts are preserved if corrupted storage collapsed the list
-  if (byUsername.size < 2) {
-    fallbackUsers.forEach((fb) => {
-      const key = fb.username.toLowerCase().trim();
-      if (!byUsername.has(key)) {
-        byUsername.set(key, normalizeUserRecord(fb));
-      }
+  if (existingByEmail) {
+    return normalizeUserRecord({
+      ...existingByEmail,
+      fullName:
+        fbUser.displayName &&
+        (!existingByEmail.fullName || existingByEmail.fullName === 'Pendidik Baiturrahman')
+          ? fbUser.displayName
+          : existingByEmail.fullName || fbUser.displayName || 'Pendidik Google',
+      email,
+      avatarUrl:
+        fbUser.photoURL ||
+        (existingByEmail.avatarUrl && existingByEmail.avatarUrl !== DEFAULT_AVATAR_URL
+          ? existingByEmail.avatarUrl
+          : DEFAULT_AVATAR_URL),
+      role:
+        existingByEmail.role && existingByEmail.role !== 'superadmin'
+          ? existingByEmail.role
+          : defaultRole === 'superadmin'
+          ? 'admin'
+          : defaultRole,
+      authProvider: 'google',
+      googleUid: fbUser.uid,
     });
   }
 
-  return Array.from(byUsername.values());
+  // 2. Derive a clean, unique username from email prefix
+  const rawPrefix = email
+    .split('@')[0]
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '')
+    .slice(0, 20);
+  const uidSuffix = fbUser.uid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toLowerCase() || 'g1';
+
+  let candidateUsername =
+    !rawPrefix || isReservedSuperAdminUsername(rawPrefix)
+      ? `google_${uidSuffix}`
+      : rawPrefix;
+
+  const usernameTakenByOther = existingUsers.some(
+    (u) =>
+      u.username.toLowerCase().trim() === candidateUsername &&
+      u.email?.toLowerCase().trim() !== email
+  );
+  if (usernameTakenByOther) {
+    candidateUsername = `${candidateUsername}_${uidSuffix}`;
+  }
+
+  return normalizeUserRecord({
+    id: `usr-${candidateUsername}`,
+    username: candidateUsername,
+    fullName: fbUser.displayName || email.split('@')[0] || 'Pendidik Google',
+    email,
+    avatarUrl: fbUser.photoURL || DEFAULT_AVATAR_URL,
+    role: defaultRole === 'superadmin' ? 'admin' : defaultRole,
+    joinedDate: new Date().toLocaleDateString('id-ID'),
+    authProvider: 'google',
+    googleUid: fbUser.uid,
+  });
 }
 
-export function isCorruptedUserDocId(uid: string, docId: string, user?: User): boolean {
-  if (/^usr_[a-zA-Z0-9]+_usr_/.test(docId)) {
-    return true;
+export function normalizeUsersList(
+  users: User[],
+  fallbackUsers: User[],
+  deletedUsernames: string[] = []
+): User[] {
+  const deletedSet = new Set(
+    (Array.isArray(deletedUsernames) ? deletedUsernames : [])
+      .map((u) => String(u || '').toLowerCase().trim())
+      .filter((u) => u && u !== 'superadmin')
+  );
+
+  const byUsername = new Map<string, User>();
+
+  // 1. Seed baseline fallback accounts first (unless explicitly deleted by Superadmin)
+  if (Array.isArray(fallbackUsers)) {
+    fallbackUsers.forEach((fb) => {
+      if (!fb || typeof fb.username !== 'string') return;
+      const key = fb.username.toLowerCase().trim();
+      if (!key || (key !== 'superadmin' && deletedSet.has(key))) return;
+      byUsername.set(key, normalizeUserRecord(fb));
+    });
   }
-  if (user) {
-    const expected = getUserProfileDocId(uid, user.id, user.username);
-    return docId !== expected;
+
+  // 2. Overlay all active accounts from the provided users array (preserving passwords, emails, Google metadata, roles, and custom profiles)
+  if (Array.isArray(users)) {
+    users.forEach((u) => {
+      if (!u || typeof u.username !== 'string') return;
+      const key = u.username.toLowerCase().trim();
+      if (!key || (key !== 'superadmin' && deletedSet.has(key))) return;
+      const existing = byUsername.get(key);
+      const preferredAvatar =
+        u.avatarUrl && u.avatarUrl !== DEFAULT_AVATAR_URL
+          ? u.avatarUrl
+          : existing?.avatarUrl && existing.avatarUrl !== DEFAULT_AVATAR_URL
+          ? existing.avatarUrl
+          : u.avatarUrl || existing?.avatarUrl || DEFAULT_AVATAR_URL;
+      const preferredAuthProvider =
+        u.authProvider === 'google' || existing?.authProvider === 'google'
+          ? 'google'
+          : u.authProvider || existing?.authProvider || 'local';
+
+      const normalized = normalizeUserRecord({
+        ...(existing || {}),
+        ...u,
+        password: u.password || existing?.password,
+        email: u.email || existing?.email || '',
+        avatarUrl: preferredAvatar,
+        authProvider: preferredAuthProvider,
+        googleUid: u.googleUid || existing?.googleUid,
+      });
+      byUsername.set(key, normalized);
+    });
   }
-  return false;
+
+  // 3. Ensure superadmin is always first, followed by Google accounts & registered accounts
+  const allUsers = Array.from(byUsername.values());
+  allUsers.sort((a, b) => {
+    if (a.username === 'superadmin') return -1;
+    if (b.username === 'superadmin') return 1;
+    return 0;
+  });
+
+  return allUsers;
+}
+
+export function mergeUserLists(
+  listsOrFirst: Array<User[] | undefined | null> | User[] | undefined | null,
+  secondOrDeleted?: User[] | string[] | undefined | null,
+  deletedUsernames: string[] = []
+): User[] {
+  const isSecondStringArray =
+    Array.isArray(secondOrDeleted) &&
+    secondOrDeleted.every((item) => typeof item === 'string');
+
+  const effectiveDeleted = isSecondStringArray
+    ? (secondOrDeleted as string[])
+    : deletedUsernames;
+
+  const fallbackUsers =
+    !isSecondStringArray && Array.isArray(secondOrDeleted)
+      ? (secondOrDeleted as User[])
+      : [];
+
+  if (
+    Array.isArray(listsOrFirst) &&
+    listsOrFirst.some((item) => Array.isArray(item) || item === undefined || item === null)
+  ) {
+    const rawLists = (listsOrFirst as Array<User[] | undefined | null>).filter(
+      (list): list is User[] => Array.isArray(list)
+    );
+    // Keep baseline lists (e.g. INITIAL_USERS of length 4 where id='usr-1' has no password) first so they never overwrite customized accounts
+    const baselineLists: User[][] = [];
+    const activeLists: User[][] = [];
+    rawLists.forEach((list) => {
+      const isBaselineSeed =
+        list.length === 4 &&
+        list.some((u) => u.username === 'abuza' && !u.password && u.id === 'usr-1');
+      if (isBaselineSeed) {
+        baselineLists.push(list);
+      } else {
+        activeLists.push(list);
+      }
+    });
+    const combined: User[] = [];
+    baselineLists.forEach((l) => combined.push(...l));
+    activeLists.forEach((l) => combined.push(...l));
+    return normalizeUsersList(combined, fallbackUsers, effectiveDeleted);
+  }
+  const firstList = Array.isArray(listsOrFirst) ? (listsOrFirst as User[]) : [];
+  return normalizeUsersList(firstList, fallbackUsers, effectiveDeleted);
+}
+
+export function isCorruptedUserDocId(_uid: string, docId: string, _user?: User): boolean {
+  return /^usr_[a-zA-Z0-9]+_usr_/.test(docId);
 }
 
 export function getUserProfileDocId(uid: string, userId: string, username?: string): string {
@@ -341,14 +602,106 @@ export async function deleteFirestoreDoc(collectionPath: string, docId: string):
 // Entity Serializers & Upsert Functions
 // =========================================================
 
+export interface GlobalWorkspaceSnapshot {
+  classes?: ClassRoom[];
+  subjects?: Subject[];
+  students?: Student[];
+  grades?: Grade[];
+  tahfidzGrades?: TahfidzGrade[];
+  reportCards?: ReportCardRecord[];
+  examFiles?: ExamFile[];
+  examPackages?: ExamQuestionsPackage[];
+  studentAttendance?: StudentAttendanceRecord[];
+  teacherAttendance?: TeacherAttendanceRecord[];
+  teachingAssignments?: TeachingAssignment[];
+}
+
+let cachedGlobalUsers: User[] | null = null;
+let cachedDeletedUsernames: string[] = [];
+let cachedGlobalWorkspace: GlobalWorkspaceSnapshot | null = null;
+
+export function setGlobalDatabaseCache(patch: {
+  users?: User[];
+  deletedUsernames?: string[];
+  workspace?: GlobalWorkspaceSnapshot;
+}): void {
+  if (Array.isArray(patch.users)) {
+    cachedGlobalUsers = patch.users.map((u) => normalizeUserRecord(u));
+  }
+  if (Array.isArray(patch.deletedUsernames)) {
+    cachedDeletedUsernames = Array.from(
+      new Set(
+        patch.deletedUsernames
+          .map((u) => String(u || '').toLowerCase().trim())
+          .filter((u) => u && u !== 'superadmin')
+      )
+    );
+  }
+  if (patch.workspace && typeof patch.workspace === 'object') {
+    cachedGlobalWorkspace = {
+      ...(cachedGlobalWorkspace || {}),
+      ...patch.workspace,
+    };
+  }
+}
+
+function getEffectiveUsersForGlobalSync(): User[] {
+  if (Array.isArray(cachedGlobalUsers) && cachedGlobalUsers.length > 0) {
+    return cachedGlobalUsers;
+  }
+  try {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('bw_users_list');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((u: User) => normalizeUserRecord(u));
+        }
+      }
+    }
+  } catch {
+    // Ignore storage read error
+  }
+  return [];
+}
+
+function getEffectiveDeletedUsernames(): string[] {
+  if (cachedDeletedUsernames.length > 0) return cachedDeletedUsernames;
+  try {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('bw_deleted_usernames');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map((u) => String(u || '').toLowerCase().trim())
+            .filter((u) => u && u !== 'superadmin');
+        }
+      }
+    }
+  } catch {
+    // Ignore storage read error
+  }
+  return [];
+}
+
 export async function syncSchoolConfigToFirestore(
   uid: string,
   siteSettings: SiteSettings,
   themeSettings: ThemeSettings,
   academicYear: string,
-  updatedAtMs?: number
+  updatedAtMs?: number,
+  extraPatch?: {
+    users?: User[];
+    deletedUsernames?: string[];
+    workspace?: GlobalWorkspaceSnapshot;
+  }
 ): Promise<void> {
   if (isFirestoreQuotaExhausted()) return;
+
+  if (extraPatch) {
+    setGlobalDatabaseCache(extraPatch);
+  }
 
   const safeOwnerId = sanitizeId(uid || auth.currentUser?.uid || 'superadmin_global', 'usr');
   const normTheme = normalizeThemeSettings(themeSettings);
@@ -442,6 +795,16 @@ export async function syncSchoolConfigToFirestore(
     reportShowFooterMeta: normTheme.reportShowFooterMeta !== false,
   };
 
+  const fullUsers = getEffectiveUsersForGlobalSync();
+  const compactUsers = fullUsers.map((u) => ({
+    ...normalizeUserRecord(u),
+    avatarUrl:
+      u.avatarUrl && u.avatarUrl.length <= 20000
+        ? u.avatarUrl
+        : '/src/assets/images/avatar_muhammad_siroj_1791464103883.jpg',
+  }));
+  const deletedUsernames = getEffectiveDeletedUsernames();
+
   const extendedPayload = {
     updatedAtMs: updatedAtMs || Date.now(),
     site: {
@@ -461,22 +824,26 @@ export async function syncSchoolConfigToFirestore(
       announcements: Array.isArray(siteSettings.announcements) ? siteSettings.announcements : [],
     },
     theme: themeForExtended,
+    users: fullUsers,
+    deletedUsernames,
+    ...(cachedGlobalWorkspace ? { workspace: cachedGlobalWorkspace } : {}),
   };
 
   const serializeExtendedSafely = (): string => {
     const rawJson = JSON.stringify(extendedPayload);
-    if (rawJson.length <= 495000) return rawJson;
+    if (rawJson.length <= 490000) return rawJson;
 
-    // Step 1: Trim savedCustomFrames if oversized
+    // Step 1: Compact oversized base64 user avatars & savedCustomFrames
     const step1 = {
       ...extendedPayload,
+      users: compactUsers,
       theme: {
         ...extendedPayload.theme,
         savedCustomFrames: [],
       },
     };
     const json1 = JSON.stringify(step1);
-    if (json1.length <= 495000) return json1;
+    if (json1.length <= 490000) return json1;
 
     // Step 2: Trim customFrameConfig.customImageUrl if still oversized
     const step2 = {
@@ -489,18 +856,21 @@ export async function syncSchoolConfigToFirestore(
       },
     };
     const json2 = JSON.stringify(step2);
-    if (json2.length <= 495000) return json2;
+    if (json2.length <= 490000) return json2;
 
-    // Step 3: Trim customRightLogoUrl if still oversized so web theme settings always sync
+    // Step 3: Trim customRightLogoUrl & heavy workspace arrays while always keeping users + theme + site
     const step3 = {
-      ...step2,
+      updatedAtMs: step2.updatedAtMs,
+      site: step2.site,
       theme: {
         ...step2.theme,
         customRightLogoUrl: '',
       },
+      users: compactUsers,
+      deletedUsernames,
     };
     const json3 = JSON.stringify(step3);
-    return json3.length <= 495000 ? json3 : '{}';
+    return json3.length <= 490000 ? json3 : '{}';
   };
 
   const mutableFields = {
@@ -569,16 +939,30 @@ export async function syncSchoolConfigToFirestore(
   await Promise.all(tasks);
 }
 
-export function parseExtendedSchoolConfig(data: Record<string, any>): {
+export function parseExtendedSchoolConfig(
+  data?: string | Record<string, any> | null
+): {
   siteExtra: Partial<SiteSettings>;
   themeExtra: Partial<ThemeSettings>;
   updatedAtMs: number;
+  users?: User[];
+  deletedUsernames?: string[];
+  workspace?: GlobalWorkspaceSnapshot;
+  remoteUsers?: User[];
+  remoteDeletedUsernames?: string[];
+  remoteWorkspace?: GlobalWorkspaceSnapshot;
 } {
-  if (!data.extendedConfigJson || typeof data.extendedConfigJson !== 'string') {
+  const rawJsonStr =
+    typeof data === 'string'
+      ? data
+      : data && typeof data === 'object' && typeof data.extendedConfigJson === 'string'
+      ? data.extendedConfigJson
+      : '';
+  if (!rawJsonStr) {
     return { siteExtra: {}, themeExtra: {}, updatedAtMs: 0 };
   }
   try {
-    const parsed = JSON.parse(data.extendedConfigJson);
+    const parsed = JSON.parse(rawJsonStr);
     const rawTheme: Partial<ThemeSettings> =
       parsed?.theme && typeof parsed.theme === 'object' ? { ...parsed.theme } : {};
     const rawSite: Partial<SiteSettings> =
@@ -587,10 +971,33 @@ export function parseExtendedSchoolConfig(data: Record<string, any>): {
       rawSite.customRightLogoUrl = rawTheme.customRightLogoUrl;
     }
     const updatedAtMs = typeof parsed?.updatedAtMs === 'number' ? parsed.updatedAtMs : 0;
+    const remoteUsers: User[] | undefined = Array.isArray(parsed?.users)
+      ? parsed.users.map((u: User) => normalizeUserRecord(u))
+      : undefined;
+    const remoteDeletedUsernames: string[] | undefined = Array.isArray(parsed?.deletedUsernames)
+      ? parsed.deletedUsernames
+          .map((u: unknown) => String(u || '').toLowerCase().trim())
+          .filter((u: string) => u && u !== 'superadmin')
+      : undefined;
+    const remoteWorkspace: GlobalWorkspaceSnapshot | undefined =
+      parsed?.workspace && typeof parsed.workspace === 'object' ? parsed.workspace : undefined;
+
+    setGlobalDatabaseCache({
+      users: remoteUsers,
+      deletedUsernames: remoteDeletedUsernames,
+      workspace: remoteWorkspace,
+    });
+
     return {
       siteExtra: rawSite,
       themeExtra: rawTheme,
       updatedAtMs,
+      users: remoteUsers,
+      deletedUsernames: remoteDeletedUsernames,
+      workspace: remoteWorkspace,
+      remoteUsers,
+      remoteDeletedUsernames,
+      remoteWorkspace,
     };
   } catch {
     return { siteExtra: {}, themeExtra: {}, updatedAtMs: 0 };
@@ -598,35 +1005,36 @@ export function parseExtendedSchoolConfig(data: Record<string, any>): {
 }
 
 export async function syncUserProfileToFirestore(uid: string, user: User): Promise<void> {
-  const docId = getUserProfileDocId(uid, user.id, user.username);
-  const userEmail = auth.currentUser?.email;
-  const isBootstrapped =
-    userEmail === 'nasam998@gmail.com' ||
-    userEmail === 'akhirzaman998@gmail.com' ||
-    userEmail === 'mediabaiturrahman01@gmail.com';
-  const safeRole =
-    isBootstrapped || user.role === 'guru' || user.role === 'wali_kelas' ? user.role : 'guru';
+  const normalized = normalizeUserRecord(user);
+  const safeUid = sanitizeId(uid || auth.currentUser?.uid || 'global_registry', 'usr');
+  const docId = getUserProfileDocId(safeUid, normalized.id, normalized.username);
+  const safeRole: User['role'] =
+    normalized.username === 'superadmin'
+      ? 'superadmin'
+      : normalized.role === 'wali_kelas' || normalized.role === 'admin'
+      ? normalized.role
+      : 'guru';
 
   const createPayload = {
     docId,
-    ownerId: uid,
-    username: sanitizeString(user.username, 60, 'guru'),
-    fullName: sanitizeString(user.fullName, 120, 'Pendidik'),
-    email: sanitizeString(user.email || '', 120, ''),
+    ownerId: safeUid,
+    username: sanitizeString(normalized.username, 60, 'guru'),
+    fullName: sanitizeString(normalized.fullName, 120, 'Pendidik'),
+    email: sanitizeString(normalized.email || '', 120, ''),
     avatarUrl: sanitizeString(
-      user.avatarUrl,
+      normalized.avatarUrl,
       250000,
       '/src/assets/images/avatar_muhammad_siroj_1791464103883.jpg'
     ),
     StaffRole: safeRole,
-    joinedDate: sanitizeString(user.joinedDate, 40, new Date().toLocaleDateString('id-ID')),
+    joinedDate: sanitizeString(normalized.joinedDate, 40, new Date().toLocaleDateString('id-ID')),
   };
 
   const updatePayload: Record<string, unknown> = {
     fullName: createPayload.fullName,
     avatarUrl: createPayload.avatarUrl,
     email: createPayload.email,
-    ...(isBootstrapped ? { StaffRole: safeRole } : {}),
+    StaffRole: safeRole,
   };
 
   await upsertFirestoreDoc('users', docId, createPayload, updatePayload);
@@ -1014,6 +1422,20 @@ export async function seedFullWorkspaceToFirestore(
   });
   const deduplicatedUsers = Array.from(uniqueUsersMap.values());
 
+  setGlobalDatabaseCache({
+    users: deduplicatedUsers,
+    workspace: {
+      classes: payload.classes,
+      subjects: payload.subjects,
+      students: payload.students,
+      grades: payload.grades,
+      tahfidzGrades: payload.tahfidzGrades,
+      reportCards: payload.reportCards,
+      examFiles: payload.examFiles,
+      examPackages: payload.examPackages,
+    },
+  });
+
   // Clean up any known corrupted user documents tracked by onSnapshot
   const knownUsersSet = getKnownDocIdsInCollection('users');
   const corruptedDeletes = Array.from(knownUsersSet)
@@ -1047,7 +1469,11 @@ export async function seedFullWorkspaceToFirestore(
       uid,
       payload.siteSettings,
       payload.themeSettings,
-      payload.academicYear
+      payload.academicYear,
+      Date.now(),
+      {
+        users: deduplicatedUsers,
+      }
     );
   }
   await Promise.all([

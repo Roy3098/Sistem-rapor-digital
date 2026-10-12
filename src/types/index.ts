@@ -6,6 +6,9 @@ export interface User {
   avatarUrl: string;
   role: 'superadmin' | 'admin' | 'guru' | 'wali_kelas';
   joinedDate: string;
+  password?: string;
+  authProvider?: 'google' | 'local';
+  googleUid?: string;
 }
 
 export type ThemeColor =

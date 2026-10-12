@@ -29,6 +29,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen }) => {
   const {
     currentUser,
+    isSuperAdmin,
     currentView,
     setCurrentView,
     siteSettings,
@@ -41,8 +42,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen 
     setIsThemeModalOpen,
     logout,
   } = useApp();
-
-  const isSuperAdmin = currentUser?.role === 'superadmin' || currentUser?.username === 'superadmin';
 
   const navItems: { id: AppView; label: string; sub: string; icon: React.ReactNode }[] = [
     {
@@ -233,7 +232,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen 
                     {currentUser.fullName}
                   </span>
                   <span className="text-[10px] opacity-70 block truncate">
-                    @{currentUser.username} · {currentUser.role === 'superadmin' ? 'Superadmin' : 'Guru'}
+                    @{currentUser.username} · {isSuperAdmin ? 'Superadmin' : currentUser.role === 'admin' ? 'Admin' : currentUser.role === 'wali_kelas' ? 'Wali Kelas' : 'Guru'}
                   </span>
                 </div>
               </button>

@@ -9,6 +9,7 @@ export interface ThemeClasses {
   primaryLightBg: string;
   primaryBorder: string;
   primaryRing: string;
+  focusRing: string;
   gradientHeader: string;
   badge: string;
   badgeBg: string;
@@ -26,6 +27,7 @@ const UNIVERSAL_BRAND_CLASSES: ThemeClasses = {
   primaryLightBg: 'bg-brand-custom-light',
   primaryBorder: 'border-brand-custom',
   primaryRing: 'focus:ring-brand-custom',
+  focusRing: 'focus:ring-brand-custom',
   gradientHeader: 'gradient-brand-custom',
   badge: 'bg-brand-custom-light badge-text-brand-custom border-brand-custom',
   badgeBg: 'bg-brand-custom-light',
@@ -706,7 +708,8 @@ export function getReportThemeStyles(theme: ThemeSettings): ReportThemeStyles {
 
 export async function compressImageFileToDataUrl(
   file: File,
-  maxDim = 280
+  maxDim = 280,
+  quality = 0.88
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -736,7 +739,7 @@ export async function compressImageFileToDataUrl(
         if (pngData.length <= 95000) {
           resolve(pngData);
         } else {
-          resolve(canvas.toDataURL('image/webp', 0.88));
+          resolve(canvas.toDataURL('image/webp', quality));
         }
       };
       img.onerror = () => resolve(rawDataUrl);

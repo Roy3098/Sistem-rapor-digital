@@ -10,7 +10,6 @@ import {
   ThemeContentWidth,
   ThemeDensity,
   ThemeBorderRadius,
-  AnnouncementSpeed,
   AnnouncementItem,
 } from '../types';
 import {
@@ -76,6 +75,7 @@ import {
 export const ManageDataView: React.FC = () => {
   const {
     currentUser,
+    isSuperAdmin,
     manageTab,
     setManageTab,
     subjects,
@@ -84,6 +84,9 @@ export const ManageDataView: React.FC = () => {
     grades,
     tahfidzGrades,
     reportCards,
+    studentAttendance,
+    teacherAttendance,
+    teachingAssignments,
     examFiles,
     examPackages,
     users,
@@ -128,8 +131,6 @@ export const ManageDataView: React.FC = () => {
     showToast,
   } = useApp();
 
-  const isSuperAdmin =
-    currentUser?.role === 'superadmin' || currentUser?.username === 'superadmin';
   const radius = getRadiusClass(themeSettings.borderRadius);
 
   // Sync active tab with context manageTab
@@ -301,11 +302,14 @@ export const ManageDataView: React.FC = () => {
   const [newUsername, setNewUsername] = useState('');
   const [newFullName, setNewFullName] = useState('');
   const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('123456');
   const [newRole, setNewRole] = useState<User['role']>('guru');
   const [confirmDangerAction, setConfirmDangerAction] = useState<
     'clear_grades' | 'reset_sample' | null
   >(null);
   const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<string | null>(null);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userFilterProvider, setUserFilterProvider] = useState<'all' | 'google' | 'local'>('all');
 
   const [selectedDbTable, setSelectedDbTable] = useState<
     | 'students'
@@ -314,12 +318,15 @@ export const ManageDataView: React.FC = () => {
     | 'grades'
     | 'tahfidz_grades'
     | 'report_cards'
+    | 'student_attendance'
+    | 'teacher_attendance'
+    | 'teaching_assignments'
     | 'announcements'
     | 'exam_packages'
     | 'exam_files'
     | 'users'
     | 'site_and_theme_config'
-  >('students');
+  >('users');
   const [dbSearchQuery, setDbSearchQuery] = useState('');
   const [dbEditorMode, setDbEditorMode] = useState<'table' | 'json'>('table');
   const [rawJsonBuffer, setRawJsonBuffer] = useState('');
@@ -488,10 +495,11 @@ export const ManageDataView: React.FC = () => {
   const handleAddUser = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUsername.trim() || !newFullName.trim()) return;
-    addUser(newUsername, newFullName, newEmail, newRole);
+    addUser(newUsername, newFullName, newEmail, newRole, newPassword);
     setNewUsername('');
     setNewFullName('');
     setNewEmail('');
+    setNewPassword('123456');
   };
 
   // Filtered Subjects
@@ -4229,187 +4237,335 @@ export const ManageDataView: React.FC = () => {
           {/* ===================================================================== */}
           {/* SECTION 4: MANAJEMEN AKUN PENGGUNA & PENDIDIK                         */}
           {/* ===================================================================== */}
-          {(superAdminSection === 'all' || superAdminSection === 'users') && (
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-5">
-              <div className="pb-3 border-b border-slate-100">
-                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <Users className={`w-4 h-4 ${themeClasses.primaryText}`} />
-                  <span>4. Manajemen Akun Pengguna & Tenaga Pendidik ({users.length} Akun)</span>
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Kelola akun pengajar, wali kelas, dan administrator yang memiliki hak akses input nilai dan bank soal.
-                </p>
-              </div>
+          {(superAdminSection === 'all' || superAdminSection === 'users') && (() => {
+            const isGoogleUser = (u: User) =>
+              u.authProvider === 'google' ||
+              Boolean(u.googleUid) ||
+              Boolean(
+                u.email &&
+                  u.email.includes('@') &&
+                  !u.email.toLowerCase().endsWith('@baiturrahman.sch.id')
+              );
 
-              <form
-                onSubmit={handleAddUser}
-                className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3"
-              >
-                <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <Plus className={`w-3.5 h-3.5 ${themeClasses.primaryText}`} />
-                  <span>Tambah Akun Pendidik Baru</span>
-                </h4>
+            const googleUsersCount = users.filter((u) => isGoogleUser(u)).length;
+            const localUsersCount = users.filter((u) => !isGoogleUser(u)).length;
 
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-                  <input
-                    type="text"
-                    required
-                    placeholder="Username"
-                    value={newUsername}
-                    onChange={(e) => setNewUsername(e.target.value)}
-                    className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs"
-                  />
-                  <input
-                    type="text"
-                    required
-                    placeholder="Nama Lengkap"
-                    value={newFullName}
-                    onChange={(e) => setNewFullName(e.target.value)}
-                    className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs"
-                  />
-                  <input
-                    type="email"
-                    placeholder="Email (Opsional)"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs"
-                  />
-                  <select
-                    value={newRole}
-                    onChange={(e) => setNewRole(e.target.value as any)}
-                    className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium"
-                  >
-                    <option value="guru">Guru / Pendidik</option>
-                    <option value="wali_kelas">Wali Kelas</option>
-                    <option value="admin">Administrator</option>
-                  </select>
-                </div>
+            const filteredUsers = users.filter((u) => {
+              const google = isGoogleUser(u);
+              if (userFilterProvider === 'google' && !google) return false;
+              if (userFilterProvider === 'local' && google) return false;
+              if (!userSearchQuery.trim()) return true;
+              const q = userSearchQuery.trim().toLowerCase();
+              return (
+                u.fullName.toLowerCase().includes(q) ||
+                u.username.toLowerCase().includes(q) ||
+                (u.email || '').toLowerCase().includes(q) ||
+                u.role.toLowerCase().includes(q)
+              );
+            });
 
-                <div className="flex justify-end pt-1">
-                  <button
-                    type="submit"
-                    className={`w-full sm:w-auto btn-precision ${themeClasses.primary} ${themeClasses.primaryHover} text-white shadow-xs`}
-                  >
-                    + Tambah Pengguna
-                  </button>
-                </div>
-              </form>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-80 overflow-y-auto pr-1">
-                {users.map((u) => {
-                  const isSuper = u.username === 'superadmin' || u.role === 'superadmin';
-                  return (
-                    <div
-                      key={u.id}
-                      className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs"
+            return (
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                      <Users className={`w-4 h-4 ${themeClasses.primaryText}`} />
+                      <span>
+                        4. Manajemen Akun Pengguna & Tenaga Pendidik ({users.length} Akun Terdaftar)
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Seluruh akun pendidik, wali kelas, administrator, maupun pengguna yang login/daftar menggunakan <strong>Akun Google</strong> terbaca & tersinkron otomatis secara real-time di Database Cloud Firestore.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <span className="h-8 px-2.5 inline-flex items-center rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold">
+                      {users.length} Total ({googleUsersCount} Google · {localUsersCount} Lokal)
+                    </span>
+                    <button
+                      type="button"
+                      disabled={isSyncing}
+                      onClick={() => forceSyncAllToCloud()}
+                      className={`btn-precision ${themeClasses.primary} ${themeClasses.primaryHover} text-white cursor-pointer disabled:opacity-60`}
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <img
-                          src={u.avatarUrl}
-                          alt={u.fullName}
-                          className="w-8 h-8 rounded-full object-cover ring-1 ring-slate-200 shrink-0"
-                        />
-                        <div className="min-w-0">
-                          <span className="font-bold text-slate-900 block truncate">
-                            {u.fullName}
-                          </span>
-                          <span className="text-[11px] text-slate-500 block truncate">
-                            @{u.username} · {u.email || 'tanpa email'}
-                          </span>
-                        </div>
-                      </div>
+                      <RotateCcw className={`w-3.5 h-3.5 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
+                      <span>{isSyncing ? 'Sinkron...' : 'Sinkronkan Semua Akun'}</span>
+                    </button>
+                  </div>
+                </div>
 
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {isSuper ? (
-                          <span
-                            className={`text-[10px] font-bold ${themeClasses.badge} border px-2 py-0.5 rounded-md`}
-                          >
-                            superadmin
-                          </span>
-                        ) : (
-                          <select
-                            value={u.role}
-                            onChange={(e) =>
-                              updateUserRecord(u.id, {
-                                role: e.target.value as User['role'],
-                              })
+                <form
+                  onSubmit={handleAddUser}
+                  className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3"
+                >
+                  <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Plus className={`w-3.5 h-3.5 ${themeClasses.primaryText}`} />
+                    <span>Tambah Akun Pendidik / Staf Baru ke Database</span>
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Username (cth: ahmad_fauzi)"
+                      value={newUsername}
+                      onChange={(e) => setNewUsername(e.target.value)}
+                      className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                    <input
+                      type="text"
+                      required
+                      placeholder="Nama Lengkap & Gelar"
+                      value={newFullName}
+                      onChange={(e) => setNewFullName(e.target.value)}
+                      className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                    <input
+                      type="email"
+                      placeholder="Email / Gmail (Opsional)"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                    <input
+                      type="text"
+                      required
+                      placeholder="Password Awal (Min 6 kar)"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-mono"
+                    />
+                    <select
+                      value={newRole}
+                      onChange={(e) => setNewRole(e.target.value as any)}
+                      className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium"
+                    >
+                      <option value="guru">Guru / Pendidik</option>
+                      <option value="wali_kelas">Wali Kelas</option>
+                      <option value="admin">Administrator</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                    <span className="text-[11px] text-slate-500">
+                      Catatan: Pengguna yang masuk/daftar dengan <strong>Akun Google</strong> akan langsung tampil otomatis di daftar bawah ini. Hak akses <strong>Super Admin</strong> dikunci khusus untuk akun utama <code className="font-mono font-bold">@superadmin</code>.
+                    </span>
+                    <button
+                      type="submit"
+                      className={`w-full sm:w-auto btn-precision ${themeClasses.primary} ${themeClasses.primaryHover} text-white shadow-xs`}
+                    >
+                      + Tambah & Simpan ke DB
+                    </button>
+                  </div>
+                </form>
+
+                {/* Filter & Search Bar for Registered Accounts */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setUserFilterProvider('all')}
+                      className={`h-8 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        userFilterProvider === 'all'
+                          ? `${themeClasses.primary} text-white shadow-2xs`
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Semua Akun ({users.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUserFilterProvider('google')}
+                      className={`h-8 px-3 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+                        userFilterProvider === 'google'
+                          ? 'bg-blue-600 text-white shadow-2xs'
+                          : 'bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100'
+                      }`}
+                    >
+                      <span>Akun Google ({googleUsersCount})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUserFilterProvider('local')}
+                      className={`h-8 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        userFilterProvider === 'local'
+                          ? 'bg-slate-800 text-white shadow-2xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Akun Lokal ({localUsersCount})
+                    </button>
+                  </div>
+
+                  <div className="relative w-full sm:w-64">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Cari nama, @username, atau email..."
+                      value={userSearchQuery}
+                      onChange={(e) => setUserSearchQuery(e.target.value)}
+                      className="w-full h-8 pl-8 pr-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-[28rem] overflow-y-auto pr-1">
+                  {filteredUsers.map((u) => {
+                    const isSuper =
+                      u.username.toLowerCase() === 'superadmin' && u.role === 'superadmin';
+                    const google = isGoogleUser(u);
+                    return (
+                      <div
+                        key={u.id}
+                        className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs hover:border-slate-300 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <img
+                            src={
+                              u.avatarUrl ||
+                              '/src/assets/images/avatar_muhammad_siroj_1791464103883.jpg'
                             }
-                            className="h-7 px-2 bg-white border border-slate-200 rounded-md text-[11px] font-bold text-slate-700"
-                            title="Ubah Peran / Hak Akses Pengguna"
-                          >
-                            <option value="guru">guru</option>
-                            <option value="wali_kelas">wali_kelas</option>
-                            <option value="admin">admin</option>
-                          </select>
-                        )}
+                            alt={u.fullName}
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src =
+                                '/src/assets/images/avatar_muhammad_siroj_1791464103883.jpg';
+                            }}
+                            className="w-9 h-9 rounded-full object-cover ring-1 ring-slate-200 shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="font-bold text-slate-900 truncate">
+                                {u.fullName}
+                              </span>
+                              {google ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-[10px] font-bold text-blue-700">
+                                  <svg className="w-2.5 h-2.5 shrink-0" viewBox="0 0 24 24">
+                                    <path
+                                      fill="#4285F4"
+                                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                                    />
+                                    <path
+                                      fill="#34A853"
+                                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                                    />
+                                    <path
+                                      fill="#FBBC05"
+                                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                                    />
+                                    <path
+                                      fill="#EA4335"
+                                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                                    />
+                                  </svg>
+                                  <span>Akun Google</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-slate-200/70 text-[10px] font-semibold text-slate-600">
+                                  Akun Lokal
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-slate-500 block truncate mt-0.5">
+                              @{u.username} · {u.email || 'tanpa email'} · Sejak {u.joinedDate || '-'}
+                            </span>
+                          </div>
+                        </div>
 
-                        {!isSuper && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => resetUserPassword(u.id, '123456')}
-                              className="h-7 px-2 text-[11px] font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 rounded-lg inline-flex items-center gap-1 cursor-pointer"
-                              title="Reset Password ke 123456"
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {isSuper ? (
+                            <span
+                              className={`text-[10px] font-bold ${themeClasses.badge} border px-2 py-0.5 rounded-md`}
                             >
-                              <Lock className="w-3 h-3 shrink-0" />
-                              <span>Reset</span>
-                            </button>
+                              superadmin (Utama)
+                            </span>
+                          ) : (
+                            <select
+                              value={u.role === 'superadmin' ? 'guru' : u.role}
+                              onChange={(e) =>
+                                updateUserRecord(u.id, {
+                                  role: e.target.value as User['role'],
+                                })
+                              }
+                              className="h-7 px-2 bg-white border border-slate-200 rounded-md text-[11px] font-bold text-slate-700"
+                              title="Ubah Peran / Hak Akses Pengguna"
+                            >
+                              <option value="guru">guru</option>
+                              <option value="wali_kelas">wali_kelas</option>
+                              <option value="admin">admin</option>
+                            </select>
+                          )}
 
-                            {confirmDeleteUserId === u.id ? (
-                              <div className="inline-flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    deleteUser(u.id);
-                                    setConfirmDeleteUserId(null);
-                                  }}
-                                  className="h-7 px-2 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold rounded-lg cursor-pointer"
-                                >
-                                  Hapus
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setConfirmDeleteUserId(null)}
-                                  className="h-7 px-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-semibold rounded-lg cursor-pointer"
-                                >
-                                  Batal
-                                </button>
-                              </div>
-                            ) : (
+                          {!isSuper && (
+                            <>
                               <button
                                 type="button"
-                                onClick={() => setConfirmDeleteUserId(u.id)}
-                                className="p-1.5 text-slate-400 hover:text-rose-700 hover:bg-rose-50 rounded-md cursor-pointer"
-                                title="Hapus Pengguna"
+                                onClick={() => resetUserPassword(u.id, '123456')}
+                                className="h-7 px-2 text-[11px] font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 rounded-lg inline-flex items-center gap-1 cursor-pointer"
+                                title="Reset Password ke 123456"
                               >
-                                <Trash2 className="w-3.5 h-3.5 text-current" />
+                                <Lock className="w-3 h-3 shrink-0" />
+                                <span>Reset</span>
                               </button>
-                            )}
-                          </>
-                        )}
+
+                              {confirmDeleteUserId === u.id ? (
+                                <div className="inline-flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      deleteUser(u.id);
+                                      setConfirmDeleteUserId(null);
+                                    }}
+                                    className="h-7 px-2 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold rounded-lg cursor-pointer"
+                                  >
+                                    Hapus
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmDeleteUserId(null)}
+                                    className="h-7 px-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-semibold rounded-lg cursor-pointer"
+                                  >
+                                    Batal
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteUserId(u.id)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-700 hover:bg-rose-50 rounded-md cursor-pointer"
+                                  title="Hapus Pengguna"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 text-current" />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ===================================================================== */}
           {/* SECTION 5: KONSOL AKSES PENUH DATABASE, EKSPLORASI TABEL & BACKUP     */}
           {/* ===================================================================== */}
           {(superAdminSection === 'all' || superAdminSection === 'database') && (() => {
             const dbTablesMeta = [
+              { key: 'users', label: 'Akun Pengguna', count: users.length, data: users },
               { key: 'students', label: 'Data Santri', count: students.length, data: students },
               { key: 'classes', label: 'Data Kelas', count: classes.length, data: classes },
               { key: 'subjects', label: 'Mata Pelajaran', count: subjects.length, data: subjects },
               { key: 'grades', label: 'Nilai Akademik', count: grades.length, data: grades },
               { key: 'tahfidz_grades', label: 'Nilai Tahfidz', count: tahfidzGrades.length, data: tahfidzGrades },
               { key: 'report_cards', label: 'Rapor Digital', count: reportCards.length, data: reportCards },
+              { key: 'student_attendance', label: 'Absensi Santri', count: studentAttendance.length, data: studentAttendance },
+              { key: 'teacher_attendance', label: 'Absensi Guru', count: teacherAttendance.length, data: teacherAttendance },
+              { key: 'teaching_assignments', label: 'Jadwal & Pengampu', count: teachingAssignments.length, data: teachingAssignments },
               { key: 'announcements', label: 'Pengumuman', count: announcements.length, data: announcements },
               { key: 'exam_packages', label: 'Paket Soal', count: examPackages.length, data: examPackages },
               { key: 'exam_files', label: 'Berkas Ujian', count: examFiles.length, data: examFiles },
-              { key: 'users', label: 'Akun Pengguna', count: users.length, data: users },
               {
                 key: 'site_and_theme_config',
                 label: 'Konfigurasi Web',
@@ -4448,7 +4604,17 @@ export const ManageDataView: React.FC = () => {
 
             const handleOpenNewDbRecord = () => {
               const template =
-                selectedDbTable === 'students'
+                selectedDbTable === 'users'
+                  ? {
+                      id: 'usr-' + Date.now(),
+                      username: 'guru_baru',
+                      fullName: 'Nama Pendidik Baru',
+                      email: 'guru.baru@baiturrahman.sch.id',
+                      avatarUrl: '/src/assets/images/avatar_ahmad_fauzi_1791464104000.jpg',
+                      role: 'guru',
+                      joinedDate: new Date().toLocaleDateString('id-ID'),
+                    }
+                  : selectedDbTable === 'students'
                   ? {
                       id: Math.max(0, ...students.map((s) => s.id)) + 1,
                       nis: 'NIS-' + Math.floor(10000 + Math.random() * 90000),

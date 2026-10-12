@@ -27,6 +27,7 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
   const {
     currentUser,
+    isSuperAdmin,
     currentView,
     setCurrentView,
     setManageTab,
@@ -48,7 +49,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
-  const isSuperAdmin = currentUser?.role === 'superadmin' || currentUser?.username === 'superadmin';
   const isDarkSurface = isDeviceDarkMode;
   const isHeaderDarkBg =
     isDarkSurface ||
@@ -301,7 +301,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
                         </p>
                         <p className="text-[11px] text-slate-400 truncate">@{currentUser.username}</p>
                         <span className={`inline-block mt-1 text-[10px] uppercase tracking-wider font-bold ${themeClasses.badgeBg} ${themeClasses.badgeText} px-2 py-0.5 rounded-md`}>
-                          {currentUser.role === 'superadmin' ? 'Super Administrator' : 'Tenaga Pendidik'}
+                          {isSuperAdmin ? 'Super Administrator' : currentUser.role === 'admin' ? 'Administrator' : currentUser.role === 'wali_kelas' ? 'Wali Kelas' : 'Tenaga Pendidik'}
                         </span>
                       </div>
 
@@ -361,37 +361,39 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
                       </button>
 
                       {isSuperAdmin && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCurrentView('manage');
-                            setManageTab('superadmin');
-                            setDropdownOpen(false);
-                          }}
-                          className={`w-full flex items-center gap-2.5 px-4 py-2 text-xs font-semibold ${themeClasses.primaryText} ${
-                            isDarkSurface ? 'hover:bg-slate-800' : 'hover:bg-slate-50'
-                          } text-left transition-colors cursor-pointer`}
-                        >
-                          <Settings className="w-4 h-4 text-current" />
-                          <span>Pengaturan Super Admin (Kelola)</span>
-                        </button>
-                      )}
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCurrentView('manage');
+                              setManageTab('superadmin');
+                              setDropdownOpen(false);
+                            }}
+                            className={`w-full flex items-center gap-2.5 px-4 py-2 text-xs font-semibold ${themeClasses.primaryText} ${
+                              isDarkSurface ? 'hover:bg-slate-800' : 'hover:bg-slate-50'
+                            } text-left transition-colors cursor-pointer`}
+                          >
+                            <Settings className="w-4 h-4 text-current" />
+                            <span>Pengaturan Super Admin (Kelola)</span>
+                          </button>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          resetToSampleData();
-                          setDropdownOpen(false);
-                        }}
-                        className={`w-full flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-left transition-colors cursor-pointer ${
-                          isDarkSurface
-                            ? 'text-slate-200 hover:bg-slate-800'
-                            : 'text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <RotateCcw className="w-4 h-4 text-slate-400" />
-                        <span>Reset Data Sampel Awal</span>
-                      </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              resetToSampleData();
+                              setDropdownOpen(false);
+                            }}
+                            className={`w-full flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-left transition-colors cursor-pointer ${
+                              isDarkSurface
+                                ? 'text-slate-200 hover:bg-slate-800'
+                                : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <RotateCcw className="w-4 h-4 text-slate-400" />
+                            <span>Reset Data Sampel Awal</span>
+                          </button>
+                        </>
+                      )}
 
                       <div
                         className={`border-t mt-1 pt-1 ${

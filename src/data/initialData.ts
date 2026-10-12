@@ -195,7 +195,7 @@ export const SUPERADMIN_USER: User = {
   id: 'usr-superadmin',
   username: 'superadmin',
   fullName: 'Super Administrator',
-  email: 'admin.baiturrahman@gmail.com',
+  email: 'akhirzaman998@gmail.com',
   avatarUrl: '/app-logo.png',
   role: 'superadmin',
   joinedDate: '01/01/2024',

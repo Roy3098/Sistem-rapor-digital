@@ -17,6 +17,7 @@ import {
 export const ProfileView: React.FC = () => {
   const {
     currentUser,
+    isSuperAdmin,
     themeClasses,
     updateProfile,
     changePassword,
@@ -27,8 +28,6 @@ export const ProfileView: React.FC = () => {
     setManageTab,
     showToast,
   } = useApp();
-
-  const isSuperAdmin = currentUser?.username === 'superadmin' || currentUser?.role === 'superadmin';
 
   // Modal States
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
