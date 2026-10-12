@@ -33,6 +33,7 @@ export const AttendanceView: React.FC = () => {
     students,
     users,
     academicYear,
+    siteSettings,
     studentAttendance,
     teacherAttendance,
     saveStudentAttendance,
@@ -56,7 +57,12 @@ export const AttendanceView: React.FC = () => {
     return classes.length > 0 ? classes[0].id : 1;
   });
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
-  const [selectedSemester, setSelectedSemester] = useState<1 | 2>(1);
+  const [selectedSemester, setSelectedSemester] = useState<1 | 2>(() =>
+    siteSettings.defaultSemester === 2 ? 2 : 1
+  );
+  React.useEffect(() => {
+    setSelectedSemester(siteSettings.defaultSemester === 2 ? 2 : 1);
+  }, [siteSettings.defaultSemester]);
   const [studentSearch, setStudentSearch] = useState<string>('');
 
   // Local draft status for currently active class on the selected date

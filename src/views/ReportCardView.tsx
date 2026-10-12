@@ -1,7 +1,12 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { ReportCardRecord, ThemeColor } from '../types';
-import { getRadiusClass, getReportThemeStyles, angkaTerbilang } from '../utils/theme';
+import {
+  getRadiusClass,
+  getReportThemeStyles,
+  angkaTerbilang,
+  evaluateGradePredicate,
+} from '../utils/theme';
 import { BrandLogoIcon, OfficialKopSurat } from '../components/BrandLogoIcon';
 import { PdfSettingsModal, PdfSettingsTabId } from '../components/PdfSettingsModal';
 import {
@@ -107,11 +112,14 @@ export const ReportCardView: React.FC = () => {
     [subjects]
   );
 
-  // Precision Filters
-  const [selectedClassId, setSelectedClassId] = useState<string>(
-    classes.length > 0 ? classes[0].id.toString() : ''
+  // Precision Filters (Supports 'all' for Semua Kelas)
+  const [selectedClassId, setSelectedClassId] = useState<string>('all');
+  const [selectedSemester, setSelectedSemester] = useState<1 | 2>(() =>
+    siteSettings.defaultSemester === 2 ? 2 : 1
   );
-  const [selectedSemester, setSelectedSemester] = useState<1 | 2>(1);
+  React.useEffect(() => {
+    setSelectedSemester(siteSettings.defaultSemester === 2 ? 2 : 1);
+  }, [siteSettings.defaultSemester]);
   const [statusFilter, setStatusFilter] = useState<'all' | 'ready' | 'published' | 'draft'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showReportThemeBar, setShowReportThemeBar] = useState<boolean>(false);
@@ -121,8 +129,8 @@ export const ReportCardView: React.FC = () => {
   const [isBatchPrinting, setIsBatchPrinting] = useState<boolean>(false);
   const [editingReport, setEditingReport] = useState<ReportCardRecord | null>(null);
   const [editStudentGrades, setEditStudentGrades] = useState<Record<number, string>>({});
-  const [editTahfidzScore, setEditTahfidzScore] = useState<string>('85');
-  const [editTajweedScore, setEditTajweedScore] = useState<string>('85');
+  const [editTahfidzScore, setEditTahfidzScore] = useState<string>('');
+  const [editTajweedScore, setEditTajweedScore] = useState<string>('');
   const [editorActiveTab, setEditorActiveTab] = useState<
     'agama' | 'umum' | 'attendance_notes' | 'signatures'
   >('agama');
@@ -186,58 +194,114 @@ export const ReportCardView: React.FC = () => {
     await printElementsInIsolatedFrame(sheets, docTitle, pdfExportOptions);
   };
 
-  // Active Class Students
+  // Active Class Students (supports 'all' for Semua Kelas)
   const classStudents = useMemo(() => {
-    if (!selectedClassId) return [];
-    return students.filter((s) => s.classId === parseInt(selectedClassId, 10));
+    if (!selectedClassId || selectedClassId === 'all') return students;
+    const clsId = parseInt(selectedClassId, 10);
+    return students.filter((s) => Number(s.classId) === clsId);
   }, [students, selectedClassId]);
 
-  // Current Class Object
+  // Current Class Object (null when 'all' is selected)
   const currentClass = useMemo(() => {
-    if (!selectedClassId) return null;
-    return classes.find((c) => c.id === parseInt(selectedClassId, 10)) || null;
+    if (!selectedClassId || selectedClassId === 'all') return null;
+    const clsId = parseInt(selectedClassId, 10);
+    return classes.find((c) => Number(c.id) === clsId) || null;
   }, [classes, selectedClassId]);
 
-  // Rank calculation for the class
-  const classRanksMap = useMemo(() => {
-    const studentScoreList = classStudents
-      .map((st) => {
-        const stGrades = grades.filter(
-          (g) => g.studentId === st.id && g.semester === selectedSemester
-        );
-        const total = stGrades.reduce((sum, g) => sum + g.score, 0);
-        const avg = stGrades.length > 0 ? total / stGrades.length : 0;
-        return { studentId: st.id, total, avg };
-      })
-      .sort((a, b) => b.avg - a.avg || b.total - a.total);
-
-    const ranks: Record<number, number> = {};
-    studentScoreList.forEach((item, idx) => {
-      ranks[item.studentId] = idx + 1;
+  // Student count per class for accurate rank display
+  const classStudentCountsMap = useMemo(() => {
+    const counts: Record<number, number> = {};
+    students.forEach((st) => {
+      const cId = Number(st.classId);
+      counts[cId] = (counts[cId] || 0) + 1;
     });
-    return ranks;
-  }, [classStudents, grades, selectedSemester]);
+    return counts;
+  }, [students]);
 
-  // Enriched Student Report Cards List (All in class)
+  // Rank calculation per class (so rank is always accurate within each student's class)
+  const classRanksMap = useMemo(() => {
+    const ranks: Record<number, number> = {};
+    const studentsByClass: Record<number, typeof students> = {};
+    students.forEach((st) => {
+      const cId = Number(st.classId);
+      if (!studentsByClass[cId]) studentsByClass[cId] = [];
+      studentsByClass[cId].push(st);
+    });
+
+    Object.values(studentsByClass).forEach((clsStudents) => {
+      const studentScoreList = clsStudents
+        .map((st) => {
+          const stGrades = grades.filter(
+            (g) =>
+              Number(g.studentId) === Number(st.id) &&
+              Number(g.semester) === Number(selectedSemester)
+          );
+          const stTahfidz = tahfidzGrades.find(
+            (t) =>
+              Number(t.studentId) === Number(st.id) &&
+              Number(t.semester) === Number(selectedSemester)
+          );
+          const scores = [
+            ...stGrades.map((g) => Number(g.score)),
+            ...(stTahfidz ? [Number(stTahfidz.totalScore)] : []),
+          ];
+          const total = scores.reduce((sum, sc) => sum + sc, 0);
+          const avg = scores.length > 0 ? total / scores.length : 0;
+          return { studentId: st.id, total, avg };
+        })
+        .sort((a, b) => b.avg - a.avg || b.total - a.total);
+
+      studentScoreList.forEach((item, idx) => {
+        ranks[item.studentId] = idx + 1;
+      });
+    });
+
+    return ranks;
+  }, [students, grades, tahfidzGrades, selectedSemester]);
+
+  // Enriched Student Report Cards List (All in selected class or all classes)
   const allClassReportItems = useMemo(() => {
     return classStudents.map((st) => {
       const repId = `${st.id}_${selectedSemester}_${academicYear}`;
-      const existingRecord = reportCards.find((r) => r.id === repId);
-
-      const studentGrades = grades.filter(
-        (g) => g.studentId === st.id && g.semester === selectedSemester
+      const existingRecord = reportCards.find(
+        (r) =>
+          r.id === repId ||
+          (Number(r.studentId) === Number(st.id) &&
+            Number(r.semester) === Number(selectedSemester) &&
+            r.academicYear === academicYear)
       );
-      const totalScore = studentGrades.reduce((sum, g) => sum + g.score, 0);
+
+      const studentGrades = grades
+        .filter(
+          (g) =>
+            Number(g.studentId) === Number(st.id) &&
+            Number(g.semester) === Number(selectedSemester)
+        )
+        .map((g) => {
+          const sub = subjects.find((s) => Number(s.id) === Number(g.subjectId));
+          return {
+            ...g,
+            subjectName: sub ? sub.name : `Mapel #${g.subjectId}`,
+          };
+        });
+
+      const studentTahfidz = tahfidzGrades.find(
+        (t) =>
+          Number(t.studentId) === Number(st.id) &&
+          Number(t.semester) === Number(selectedSemester)
+      );
+
+      const totalScore = studentGrades.reduce((sum, g) => sum + Number(g.score), 0);
       const averageScore =
         studentGrades.length > 0 ? (totalScore / studentGrades.length).toFixed(1) : '-';
 
-      const studentTahfidz = tahfidzGrades.find(
-        (t) => t.studentId === st.id && t.semester === selectedSemester
-      );
+      const stClass = classes.find((c) => Number(c.id) === Number(st.classId)) || null;
 
       return {
         student: st,
+        studentClass: stClass,
         reportCard: existingRecord || null,
+        studentGrades,
         gradesCount: studentGrades.length,
         averageScore,
         rank: classRanksMap[st.id] || 1,
@@ -254,6 +318,8 @@ export const ReportCardView: React.FC = () => {
     academicYear,
     reportCards,
     grades,
+    subjects,
+    classes,
     tahfidzGrades,
     classRanksMap,
   ]);
@@ -283,19 +349,28 @@ export const ReportCardView: React.FC = () => {
   // Quick Status Toggle on Card
   const handleToggleStatus = (studentId: number, newStatus: ReportCardRecord['status']) => {
     const repId = `${studentId}_${selectedSemester}_${academicYear}`;
-    const st = students.find((s) => s.id === studentId);
-    const existing = reportCards.find((r) => r.id === repId);
+    const st = students.find((s) => Number(s.id) === Number(studentId));
+    const stClass = classes.find((c) => Number(c.id) === Number(st?.classId)) || currentClass;
+    const existing = reportCards.find(
+      (r) =>
+        r.id === repId ||
+        (Number(r.studentId) === Number(studentId) &&
+          Number(r.semester) === Number(selectedSemester) &&
+          r.academicYear === academicYear)
+    );
 
     if (existing) {
       saveReportCard({ ...existing, status: newStatus });
     } else {
       const studentTahfidz = tahfidzGrades.find(
-        (t) => t.studentId === studentId && t.semester === selectedSemester
+        (t) =>
+          Number(t.studentId) === Number(studentId) &&
+          Number(t.semester) === Number(selectedSemester)
       );
       const fresh: ReportCardRecord = {
         id: repId,
         studentId,
-        classId: parseInt(selectedClassId, 10),
+        classId: st ? Number(st.classId) : parseInt(selectedClassId, 10) || 1,
         semester: selectedSemester,
         academicYear,
         status: newStatus,
@@ -325,7 +400,7 @@ export const ReportCardView: React.FC = () => {
         issueDate: new Date().toISOString().split('T')[0],
         headmasterName: siteSettings.headmasterName || 'Muhammad Siroj, S.Pd.I',
         headmasterNip: siteSettings.headmasterNip || '19830715 200801 1 004',
-        classTeacherName: currentClass?.teacher || 'Wali Kelas',
+        classTeacherName: stClass?.teacher || 'Wali Kelas',
         updatedAt: new Date().toISOString(),
       };
       saveReportCard(fresh);
@@ -341,7 +416,8 @@ export const ReportCardView: React.FC = () => {
       const tahfidzStr = item.tahfidzGrade
         ? `${item.tahfidzGrade.totalScore} (${item.tahfidzGrade.gradeLetter})`
         : '-';
-      csv += `${item.rank},"${item.student.nis}","${item.student.name}","Kelas ${currentClass?.name}","${selectedSemester}","${academicYear}","${item.status}","${item.averageScore}","${tahfidzStr}",${item.reportCard?.attendance.sick || 0},${item.reportCard?.attendance.permission || 0},${item.reportCard?.attendance.unexcused || 0},"${notes}"\n`;
+      const clsName = item.studentClass?.name || currentClass?.name || '-';
+      csv += `${item.rank},"${item.student.nis}","${item.student.name}","Kelas ${clsName}","${selectedSemester}","${academicYear}","${item.status}","${item.averageScore}","${tahfidzStr}",${item.reportCard?.attendance.sick || 0},${item.reportCard?.attendance.permission || 0},${item.reportCard?.attendance.unexcused || 0},"${notes}"\n`;
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -350,45 +426,22 @@ export const ReportCardView: React.FC = () => {
     link.href = url;
     link.setAttribute(
       'download',
-      `Rekap_Rapor_Kelas_${currentClass?.name || 'Kelas'}_Sem${selectedSemester}.csv`
+      `Rekap_Rapor_${currentClass ? `Kelas_${currentClass.name}` : 'Semua_Kelas'}_Sem${selectedSemester}.csv`
     );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    showToast('Rekap CSV Rapor Kelas berhasil diunduh.', 'success');
+    showToast('Rekap CSV Rapor berhasil diunduh.', 'success');
   };
 
-  // Grade predicate helper
+  // Grade predicate helper (configured via Super Admin)
   const getGradePredicate = (score: number) => {
-    if (score >= 86)
-      return {
-        letter: 'A',
-        text: 'Mumtaz (Istimewa)',
-        desc: 'Sangat baik dalam menguasai seluruh kompetensi.',
-      };
-    if (score >= 81)
-      return {
-        letter: 'B',
-        text: 'Jayyid Jiddan (Sangat Baik)',
-        desc: 'Baik dalam menguasai kompetensi dasar.',
-      };
-    if (score >= 71)
-      return {
-        letter: 'C',
-        text: 'Jayyid (Baik)',
-        desc: 'Cukup dalam menguasai sebagian kompetensi.',
-      };
-    if (score >= 60)
-      return {
-        letter: 'D',
-        text: 'Maqbul (Cukup)',
-        desc: 'Memerlukan bimbingan pada beberapa materi.',
-      };
+    const evalPred = evaluateGradePredicate(score, siteSettings.gradeThresholds);
     return {
-      letter: 'E',
-      text: 'Rasib (Kurang)',
-      desc: 'Perlu pengulangan dan remedial intensif.',
+      letter: evalPred.letter,
+      text: evalPred.text,
+      desc: evalPred.desc,
     };
   };
 
@@ -416,11 +469,24 @@ export const ReportCardView: React.FC = () => {
     const pagesHtml = targetStudents
       .map((st, pageIdx) => {
         const repId = `${st.id}_${selectedSemester}_${academicYear}`;
-        const rep = reportCards.find((r) => r.id === repId);
+        const rep = reportCards.find(
+          (r) =>
+            r.id === repId ||
+            (Number(r.studentId) === Number(st.id) &&
+              Number(r.semester) === Number(selectedSemester) &&
+              r.academicYear === academicYear)
+        );
+        const stClass = classes.find((c) => Number(c.id) === Number(st.classId)) || currentClass;
+        const stClassCount = classStudentCountsMap[Number(st.classId)] || classStudents.length;
+
         const stGrades = grades
-          .filter((g) => g.studentId === st.id && g.semester === selectedSemester)
+          .filter(
+            (g) =>
+              Number(g.studentId) === Number(st.id) &&
+              Number(g.semester) === Number(selectedSemester)
+          )
           .map((g) => {
-            const sub = subjects.find((s) => s.id === g.subjectId);
+            const sub = subjects.find((s) => Number(s.id) === Number(g.subjectId));
             return {
               ...g,
               subjectName: sub ? sub.name : `Mapel #${g.subjectId}`,
@@ -428,7 +494,9 @@ export const ReportCardView: React.FC = () => {
             };
           });
         const stTahfidz = tahfidzGrades.find(
-          (t) => t.studentId === st.id && t.semester === selectedSemester
+          (t) =>
+            Number(t.studentId) === Number(st.id) &&
+            Number(t.semester) === Number(selectedSemester)
         );
 
         const religiousGradesList = stGrades.filter((g) => g.isReligious);
@@ -437,7 +505,7 @@ export const ReportCardView: React.FC = () => {
         const includeTahfidzInAgama = reportStyles.showTahfidz && siteSettings.enableTahfidz;
         const tahfidzFinalScore = stTahfidz?.totalScore || 85;
         const tahfidzPred = getGradePredicate(tahfidzFinalScore);
-        const rawTahfidzNote = (rep?.tahfidzNotes || stTahfidz?.notes || '').trim();
+        const rawTahfidzNote = (stTahfidz?.notes || rep?.tahfidzNotes || '').trim();
         const cleanedNote = rawTahfidzNote.replace(/\s*\([^)]*\)/g, '').trim();
         const juzMatch = cleanedNote.match(/juz\s*[0-9a-zA-Z\s.,&-]+/i);
         const tahfidzJuzLabel =
@@ -586,13 +654,13 @@ export const ReportCardView: React.FC = () => {
               <td style="width:18%;color:#475569;font-weight:600;padding:1.5px 6px;">Nama Santri</td>
               <td style="width:34%;font-weight:800;padding:1.5px 6px;">: ${st.name}</td>
               <td style="width:18%;color:#475569;font-weight:600;padding:1.5px 6px;">Kelas / Tingkat</td>
-              <td style="width:30%;font-weight:800;padding:1.5px 6px;">: Kelas ${currentClass?.name || '-'}</td>
+              <td style="width:30%;font-weight:800;padding:1.5px 6px;">: Kelas ${stClass?.name || '-'}</td>
             </tr>
             <tr>
               <td style="color:#475569;font-weight:600;padding:1.5px 6px;">Nomor Induk (NIS)</td>
               <td style="font-weight:700;padding:1.5px 6px;">: ${st.nis}</td>
               <td style="color:#475569;font-weight:600;padding:1.5px 6px;">Wali Kelas</td>
-              <td style="font-weight:700;padding:1.5px 6px;">: ${rep?.classTeacherName || currentClass?.teacher || '-'}</td>
+              <td style="font-weight:700;padding:1.5px 6px;">: ${rep?.classTeacherName || stClass?.teacher || '-'}</td>
             </tr>
             <tr>
               <td style="color:#475569;font-weight:600;padding:1.5px 6px;">Tempat, Tgl Lahir</td>
@@ -600,7 +668,7 @@ export const ReportCardView: React.FC = () => {
               ${
                 reportStyles.showRank
                   ? `<td style="color:#475569;font-weight:600;padding:1.5px 6px;">Peringkat Kelas</td>
-                     <td style="font-weight:800;color:${reportStyles.primaryHex};padding:1.5px 6px;">: Ke-${rank} dari ${classStudents.length} Santri (Rata: ${avgG})</td>`
+                     <td style="font-weight:800;color:${reportStyles.primaryHex};padding:1.5px 6px;">: Ke-${rank} dari ${stClassCount} Santri (Rata: ${avgG})</td>`
                   : `<td style="color:#475569;font-weight:600;padding:1.5px 6px;">Tahun Pelajaran</td><td style="font-weight:700;padding:1.5px 6px;">: ${academicYear}</td>`
               }
             </tr>
@@ -722,9 +790,9 @@ export const ReportCardView: React.FC = () => {
               </td>
               <td style="width:33%;vertical-align:top;padding:0 8px;">
                 <div>Menyetujui,</div>
-                <div style="font-weight:700;">Wali Kelas ${currentClass?.name || ''}</div>
+                <div style="font-weight:700;">Wali Kelas ${stClass?.name || ''}</div>
                 <div style="height:82px;"></div>
-                <div style="font-weight:700;text-decoration:underline;">( ${rep?.classTeacherName || currentClass?.teacher || 'Wali Kelas'} )</div>
+                <div style="font-weight:700;text-decoration:underline;">( ${rep?.classTeacherName || stClass?.teacher || 'Wali Kelas'} )</div>
                 <div style="font-size:11px;color:#475569;">Wali Kelas</div>
               </td>
               <td style="width:34%;vertical-align:top;padding:0 8px;">
@@ -795,39 +863,50 @@ export const ReportCardView: React.FC = () => {
   // Open Edit Modal for a Student's Report Card
   const handleOpenEdit = (studentId: number) => {
     const repId = `${studentId}_${selectedSemester}_${academicYear}`;
-    const st = students.find((s) => s.id === studentId);
-    const existing = reportCards.find((r) => r.id === repId);
+    const st = students.find((s) => Number(s.id) === Number(studentId));
+    const stClass = classes.find((c) => Number(c.id) === Number(st?.classId)) || currentClass;
+    const existing = reportCards.find(
+      (r) =>
+        r.id === repId ||
+        (Number(r.studentId) === Number(studentId) &&
+          Number(r.semester) === Number(selectedSemester) &&
+          r.academicYear === academicYear)
+    );
     const studentTahfidz = tahfidzGrades.find(
-      (t) => t.studentId === studentId && t.semester === selectedSemester
+      (t) =>
+        Number(t.studentId) === Number(studentId) &&
+        Number(t.semester) === Number(selectedSemester)
     );
 
     // Load student's academic grades for this semester
     const stGrades = grades.filter(
-      (g) => g.studentId === studentId && g.semester === selectedSemester
+      (g) =>
+        Number(g.studentId) === Number(studentId) &&
+        Number(g.semester) === Number(selectedSemester)
     );
     const gradeMap: Record<number, string> = {};
     stGrades.forEach((g) => {
-      gradeMap[g.subjectId] = g.score.toString();
+      gradeMap[Number(g.subjectId)] = g.score.toString();
     });
     setEditStudentGrades(gradeMap);
 
-    setEditTahfidzScore(studentTahfidz ? studentTahfidz.tahfidzScore.toString() : '85');
-    setEditTajweedScore(studentTahfidz ? studentTahfidz.tajweedScore.toString() : '85');
+    setEditTahfidzScore(studentTahfidz ? studentTahfidz.tahfidzScore.toString() : '');
+    setEditTajweedScore(studentTahfidz ? studentTahfidz.tajweedScore.toString() : '');
     setEditorActiveTab('agama');
 
     if (existing) {
       setEditingReport({
         ...existing,
         tahfidzNotes:
-          existing.tahfidzNotes ||
           studentTahfidz?.notes ||
+          existing.tahfidzNotes ||
           'Juz 30',
       });
     } else {
       const fresh: ReportCardRecord = {
         id: repId,
         studentId,
-        classId: parseInt(selectedClassId, 10),
+        classId: st ? Number(st.classId) : parseInt(selectedClassId, 10) || 1,
         semester: selectedSemester,
         academicYear,
         status: 'draft',
@@ -844,7 +923,7 @@ export const ReportCardView: React.FC = () => {
         issueDate: new Date().toISOString().split('T')[0],
         headmasterName: siteSettings.headmasterName || 'Muhammad Siroj, S.Pd.I',
         headmasterNip: siteSettings.headmasterNip || '19830715 200801 1 004',
-        classTeacherName: currentClass?.teacher || 'Wali Kelas',
+        classTeacherName: stClass?.teacher || 'Wali Kelas',
         updatedAt: new Date().toISOString(),
       };
       setEditingReport(fresh);
@@ -856,30 +935,32 @@ export const ReportCardView: React.FC = () => {
     // 1. Save Report Card metadata
     saveReportCard(reportToSave);
 
-    // 2. Save Tahfidz & Tajwid unified inside Pelajaran Agama
-    const tfz = parseFloat(editTahfidzScore);
-    const tjw = parseFloat(editTajweedScore);
-    if (!isNaN(tfz) && !isNaN(tjw) && tfz >= 0 && tfz <= 100 && tjw >= 0 && tjw <= 100) {
-      saveBulkTahfidz(reportToSave.classId, reportToSave.semester, [
-        {
-          studentId: reportToSave.studentId,
-          notes: (reportToSave.tahfidzNotes || '').trim(),
-          tahfidzScore: tfz,
-          tajweedScore: tjw,
-        },
-      ]);
+    // 2. Save Tahfidz & Tajwid unified inside Pelajaran Agama (only if entered, max 90)
+    if (editTahfidzScore.trim() !== '' && editTajweedScore.trim() !== '') {
+      const tfz = Math.min(90, Math.max(0, parseFloat(editTahfidzScore)));
+      const tjw = Math.min(90, Math.max(0, parseFloat(editTajweedScore)));
+      if (!isNaN(tfz) && !isNaN(tjw) && tfz >= 0 && tjw >= 0) {
+        saveBulkTahfidz(reportToSave.classId, reportToSave.semester, [
+          {
+            studentId: reportToSave.studentId,
+            notes: (reportToSave.tahfidzNotes || '').trim(),
+            tahfidzScore: tfz,
+            tajweedScore: tjw,
+          },
+        ]);
+      }
     }
 
-    // 3. Save any updated/added Pelajaran Agama & Pelajaran Umum scores in one batch
+    // 3. Save any updated/added Pelajaran Agama & Pelajaran Umum scores in one batch (max 90)
     const newScoresBatch: Record<number, { subjectId: number; score: number }> = {};
     Object.entries(editStudentGrades).forEach(([subIdStr, valStr]) => {
       const subId = parseInt(subIdStr, 10);
       const trimmed = valStr.trim();
       const existingGrade = grades.find(
         (g) =>
-          g.studentId === reportToSave.studentId &&
-          g.subjectId === subId &&
-          g.semester === reportToSave.semester
+          Number(g.studentId) === Number(reportToSave.studentId) &&
+          Number(g.subjectId) === subId &&
+          Number(g.semester) === Number(reportToSave.semester)
       );
 
       if (trimmed === '') {
@@ -890,13 +971,14 @@ export const ReportCardView: React.FC = () => {
       }
 
       const numScore = parseFloat(trimmed);
-      if (!isNaN(numScore) && numScore >= 0 && numScore <= 100) {
+      if (!isNaN(numScore) && numScore >= 0) {
+        const clampedScore = Math.min(90, Math.max(0, numScore));
         if (existingGrade) {
-          if (existingGrade.score !== numScore) {
-            updateGrade(existingGrade.id, numScore);
+          if (existingGrade.score !== clampedScore) {
+            updateGrade(existingGrade.id, clampedScore);
           }
         } else {
-          newScoresBatch[subId] = { subjectId: subId, score: numScore };
+          newScoresBatch[subId] = { subjectId: subId, score: clampedScore };
         }
       }
     });
@@ -929,16 +1011,16 @@ export const ReportCardView: React.FC = () => {
     setEditingReport(null);
   };
 
-  // Generate All Reports for Current Class
+  // Generate All Reports for Current Class (or All Classes when 'all' is selected)
   const handleBatchGenerate = () => {
-    if (!selectedClassId) return;
-    generateClassReportCards(parseInt(selectedClassId, 10), selectedSemester);
+    const clsId = !selectedClassId || selectedClassId === 'all' ? 0 : parseInt(selectedClassId, 10);
+    generateClassReportCards(clsId, selectedSemester);
   };
 
   // Student Selected for Printable Preview
   const previewStudent = useMemo(() => {
     if (!previewStudentId) return null;
-    return students.find((s) => s.id === previewStudentId) || null;
+    return students.find((s) => Number(s.id) === Number(previewStudentId)) || null;
   }, [previewStudentId, students]);
 
   // Note templates for quick fill in editor
@@ -952,11 +1034,24 @@ export const ReportCardView: React.FC = () => {
   // Helper to render official report card sheet with full dynamic theme customization, readable typography, and single-page fit
   const renderOfficialReportCardSheet = (st: (typeof students)[0], isBatch = false) => {
     const repId = `${st.id}_${selectedSemester}_${academicYear}`;
-    const rep = reportCards.find((r) => r.id === repId);
+    const rep = reportCards.find(
+      (r) =>
+        r.id === repId ||
+        (Number(r.studentId) === Number(st.id) &&
+          Number(r.semester) === Number(selectedSemester) &&
+          r.academicYear === academicYear)
+    );
+    const stClass = classes.find((c) => Number(c.id) === Number(st.classId)) || currentClass;
+    const stClassCount = classStudentCountsMap[Number(st.classId)] || classStudents.length;
+
     const stGrades = grades
-      .filter((g) => g.studentId === st.id && g.semester === selectedSemester)
+      .filter(
+        (g) =>
+          Number(g.studentId) === Number(st.id) &&
+          Number(g.semester) === Number(selectedSemester)
+      )
       .map((g) => {
-        const sub = subjects.find((s) => s.id === g.subjectId);
+        const sub = subjects.find((s) => Number(s.id) === Number(g.subjectId));
         return {
           ...g,
           subjectName: sub ? sub.name : `Mapel #${g.subjectId}`,
@@ -964,7 +1059,9 @@ export const ReportCardView: React.FC = () => {
         };
       });
     const stTahfidz = tahfidzGrades.find(
-      (t) => t.studentId === st.id && t.semester === selectedSemester
+      (t) =>
+        Number(t.studentId) === Number(st.id) &&
+        Number(t.semester) === Number(selectedSemester)
     );
 
     const religiousGradesList = stGrades.filter((g) => g.isReligious);
@@ -975,7 +1072,7 @@ export const ReportCardView: React.FC = () => {
     const tahfidzPred = getGradePredicate(tahfidzFinalScore);
 
     // Extract concise Juz-only label for Tahfidz subtitle on PDF
-    const rawTahfidzNote = (rep?.tahfidzNotes || stTahfidz?.notes || '').trim();
+    const rawTahfidzNote = (stTahfidz?.notes || rep?.tahfidzNotes || '').trim();
     const cleanedTahfidzNote = rawTahfidzNote.replace(/\s*\([^)]*\)/g, '').trim();
     const juzRegexMatch = cleanedTahfidzNote.match(/juz\s*[0-9a-zA-Z\s.,&-]+/i);
     const tahfidzJuzOnly =
@@ -1184,7 +1281,7 @@ export const ReportCardView: React.FC = () => {
                   <td className="text-slate-700 font-semibold py-0.5 w-[17%]">Kelas / Rombel</td>
                   <td className="text-slate-500 py-0.5 w-[2%]">:</td>
                   <td className="font-extrabold text-slate-900 py-0.5 w-[29%]">
-                    Kelas {currentClass?.name || '-'}
+                    Kelas {stClass?.name || '-'}
                   </td>
                 </tr>
                 <tr>
@@ -1194,7 +1291,7 @@ export const ReportCardView: React.FC = () => {
                   <td className="text-slate-700 font-semibold py-0.5">Wali Kelas</td>
                   <td className="text-slate-500 py-0.5">:</td>
                   <td className="font-bold text-slate-800 py-0.5">
-                    {rep?.classTeacherName || currentClass?.teacher || '-'}
+                    {rep?.classTeacherName || stClass?.teacher || '-'}
                   </td>
                 </tr>
                 <tr>
@@ -1209,7 +1306,7 @@ export const ReportCardView: React.FC = () => {
                   <td className="text-slate-500 py-0.5">:</td>
                   <td className="font-extrabold py-0.5" style={{ color: reportStyles.primaryHex }}>
                     {reportStyles.showRank
-                      ? `Peringkat ${rank} dari ${classStudents.length} Santri (Rata: ${avgG})`
+                      ? `Peringkat ${rank} dari ${stClassCount} Santri (Rata: ${avgG})`
                       : `${academicYear} (Sem. ${selectedSemester})`}
                   </td>
                 </tr>
@@ -1495,12 +1592,12 @@ export const ReportCardView: React.FC = () => {
                 <div className={`flex flex-col justify-between ${sigBlockMinHClass}`}>
                   <div>
                     <p className="text-slate-600 text-[11.5px]">Menyetujui,</p>
-                    <p className="font-bold text-slate-800">Wali Kelas {currentClass?.name}</p>
+                    <p className="font-bold text-slate-800">Wali Kelas {stClass?.name || ''}</p>
                   </div>
                   <div className={sigSpacerClass} />
                   <div>
                     <p className="font-bold underline text-slate-900">
-                      ( {rep?.classTeacherName || currentClass?.teacher || 'Wali Kelas'} )
+                      ( {rep?.classTeacherName || stClass?.teacher || 'Wali Kelas'} )
                     </p>
                     <p className="text-[11px] text-slate-600">Wali Kelas</p>
                   </div>
@@ -1640,7 +1737,11 @@ export const ReportCardView: React.FC = () => {
             className="btn-precision w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white shadow-2xs"
           >
             <Printer className="w-3.5 h-3.5 text-current" />
-            <span>Cetak Kelas ({classStudents.length})</span>
+            <span>
+              {currentClass
+                ? `Cetak Kelas (${classStudents.length})`
+                : `Cetak Semua (${classStudents.length})`}
+            </span>
           </button>
 
           <button
@@ -1669,8 +1770,9 @@ export const ReportCardView: React.FC = () => {
               onChange={(e) => setSelectedClassId(e.target.value)}
               className="filter-control w-full sm:w-auto"
             >
+              <option value="all">Semua Kelas ({classes.length} Kelas)</option>
               {classes.map((cls) => (
-                <option key={cls.id} value={cls.id}>
+                <option key={cls.id} value={cls.id.toString()}>
                   Kelas {cls.name} (Wali: {cls.teacher})
                 </option>
               ))}
@@ -1744,10 +1846,11 @@ export const ReportCardView: React.FC = () => {
               })}
             </div>
 
-            {(statusFilter !== 'all' || searchQuery) && (
+            {(selectedClassId !== 'all' || statusFilter !== 'all' || searchQuery) && (
               <button
                 type="button"
                 onClick={() => {
+                  setSelectedClassId('all');
                   setStatusFilter('all');
                   setSearchQuery('');
                 }}
@@ -1790,8 +1893,13 @@ export const ReportCardView: React.FC = () => {
                         #{item.rank}
                       </div>
                       <div>
-                        <h3 className="text-sm font-bold text-slate-900">{item.student.name}</h3>
-                        <p className="text-xs text-slate-500">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <h3 className="text-sm font-bold text-slate-900">{item.student.name}</h3>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                            Kelas {item.studentClass?.name || '-'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
                           NIS: <span className="font-mono">{item.student.nis}</span> · Wali:{' '}
                           {item.student.guardian}
                         </p>
@@ -1839,6 +1947,34 @@ export const ReportCardView: React.FC = () => {
                       </span>
                     </div>
                   </div>
+
+                  {/* Connected Grades Preview from Halaman Nilai */}
+                  {item.studentGrades.length > 0 && (
+                    <div className="mb-3 p-2.5 rounded-lg bg-slate-50/70 border border-slate-200/80">
+                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">
+                        Nilai Mapel Terkoneksi (Semester {selectedSemester}):
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {item.studentGrades.map((g) => {
+                          const pred = getGradePredicate(g.score);
+                          return (
+                            <span
+                              key={g.id}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[11px] text-slate-700"
+                            >
+                              <span className="font-medium truncate max-w-[110px]">
+                                {g.subjectName}:
+                              </span>
+                              <strong className="text-slate-900 tabular-nums">{g.score}</strong>
+                              <span className="text-[10px] font-bold text-slate-500">
+                                ({pred.letter})
+                              </span>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Catatan Singkat Wali Kelas */}
                   <div className="text-xs text-slate-600 bg-white p-2.5 rounded-lg border border-slate-200/80 mb-3">
@@ -2032,27 +2168,53 @@ export const ReportCardView: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                          Nilai Tahfidz / Kelancaran (Skala 1-100)
+                          Nilai Tahfidz / Kelancaran (Skala 1-90)
                         </label>
                         <input
                           type="number"
                           min="1"
-                          max="100"
+                          max="90"
+                          placeholder="1-90"
                           value={editTahfidzScore}
-                          onChange={(e) => setEditTahfidzScore(e.target.value)}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            const n = parseFloat(raw);
+                            if (raw === '') {
+                              setEditTahfidzScore('');
+                            } else if (!isNaN(n) && n > 90) {
+                              setEditTahfidzScore('90');
+                            } else if (!isNaN(n) && n < 0) {
+                              setEditTahfidzScore('0');
+                            } else {
+                              setEditTahfidzScore(raw);
+                            }
+                          }}
                           className="w-full h-9 px-3 bg-white border border-slate-300 rounded-lg font-bold text-center tabular-nums text-slate-900"
                         />
                       </div>
                       <div>
                         <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                          Nilai Tajwid &amp; Makhorijul Huruf (Skala 1-100)
+                          Nilai Tajwid &amp; Makhorijul Huruf (Skala 1-90)
                         </label>
                         <input
                           type="number"
                           min="1"
-                          max="100"
+                          max="90"
+                          placeholder="1-90"
                           value={editTajweedScore}
-                          onChange={(e) => setEditTajweedScore(e.target.value)}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            const n = parseFloat(raw);
+                            if (raw === '') {
+                              setEditTajweedScore('');
+                            } else if (!isNaN(n) && n > 90) {
+                              setEditTajweedScore('90');
+                            } else if (!isNaN(n) && n < 0) {
+                              setEditTajweedScore('0');
+                            } else {
+                              setEditTajweedScore(raw);
+                            }
+                          }}
                           className="w-full h-9 px-3 bg-white border border-slate-300 rounded-lg font-bold text-center tabular-nums text-slate-900"
                         />
                       </div>
@@ -2084,7 +2246,7 @@ export const ReportCardView: React.FC = () => {
                         Daftar Nilai Mata Pelajaran Agama ({religiousSubjects.length} Mapel)
                       </label>
                       <span className="text-[11px] text-slate-500">
-                        Skala 0 - 100 (Kosongkan jika tidak diambil)
+                        Skala 0 - 90 (Kosongkan jika tidak diambil)
                       </span>
                     </div>
 
@@ -2113,16 +2275,26 @@ export const ReportCardView: React.FC = () => {
                             <input
                               type="number"
                               min="0"
-                              max="100"
+                              max="90"
                               step="0.5"
-                              placeholder="0-100"
+                              placeholder="0-90"
                               value={rawVal}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                const n = parseFloat(raw);
+                                const clamped =
+                                  raw === ''
+                                    ? ''
+                                    : !isNaN(n) && n > 90
+                                    ? '90'
+                                    : !isNaN(n) && n < 0
+                                    ? '0'
+                                    : raw;
                                 setEditStudentGrades((prev) => ({
                                   ...prev,
-                                  [sub.id]: e.target.value,
-                                }))
-                              }
+                                  [sub.id]: clamped,
+                                }));
+                              }}
                               className="w-20 h-8 px-2 bg-white border border-slate-300 rounded-lg text-center font-bold tabular-nums text-slate-900 shrink-0"
                             />
                           </div>
@@ -2142,7 +2314,7 @@ export const ReportCardView: React.FC = () => {
                         Daftar Nilai Pelajaran Umum ({generalSubjects.length} Mapel)
                       </label>
                       <span className="text-[11px] text-slate-500">
-                        Sains, Matematika, Sosial, Bahasa Umum, dan Keterampilan (Skala 0 - 100)
+                        Sains, Matematika, Sosial, Bahasa Umum, dan Keterampilan (Skala 0 - 90)
                       </span>
                     </div>
                   </div>
@@ -2172,16 +2344,26 @@ export const ReportCardView: React.FC = () => {
                           <input
                             type="number"
                             min="0"
-                            max="100"
+                            max="90"
                             step="0.5"
-                            placeholder="0-100"
+                            placeholder="0-90"
                             value={rawVal}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const n = parseFloat(raw);
+                              const clamped =
+                                raw === ''
+                                  ? ''
+                                  : !isNaN(n) && n > 90
+                                  ? '90'
+                                  : !isNaN(n) && n < 0
+                                  ? '0'
+                                  : raw;
                               setEditStudentGrades((prev) => ({
                                 ...prev,
-                                [sub.id]: e.target.value,
-                              }))
-                            }
+                                [sub.id]: clamped,
+                              }));
+                            }}
                             className="w-20 h-8 px-2 bg-white border border-slate-300 rounded-lg text-center font-bold tabular-nums text-slate-900 shrink-0"
                           />
                         </div>
@@ -2614,7 +2796,7 @@ export const ReportCardView: React.FC = () => {
             <div className="no-print flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-6 border-b border-slate-200 sticky top-0 bg-white/95 backdrop-blur-md z-30 pt-1">
               <div>
                 <span className="text-sm font-bold text-slate-900 block">
-                  Cetak & Unduh Massal Rapor Kelas {currentClass?.name} ({classStudents.length}{' '}
+                  Cetak & Unduh Massal Rapor {currentClass ? `Kelas ${currentClass.name}` : 'Semua Kelas'} ({classStudents.length}{' '}
                   Santri)
                 </span>
                 <span className="text-[11px] text-slate-500">
@@ -2636,7 +2818,7 @@ export const ReportCardView: React.FC = () => {
                     handleDownloadReportDocument(
                       classStudents,
                       'doc',
-                      `Bundel_Rapor_Kelas_${currentClass?.name}_Sem${selectedSemester}`
+                      `Bundel_Rapor_${currentClass ? `Kelas_${currentClass.name}` : 'Semua_Kelas'}_Sem${selectedSemester}`
                     )
                   }
                   className="btn-precision w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200"
@@ -2649,7 +2831,7 @@ export const ReportCardView: React.FC = () => {
                   onClick={() =>
                     handlePrintFromContainer(
                       batchSheetsWrapperRef.current,
-                      `Bundel_Rapor_Kelas_${currentClass?.name}_Sem${selectedSemester}`
+                      `Bundel_Rapor_${currentClass ? `Kelas_${currentClass.name}` : 'Semua_Kelas'}_Sem${selectedSemester}`
                     )
                   }
                   className="btn-precision w-full sm:w-auto bg-slate-800 hover:bg-slate-900 text-white"
@@ -2663,7 +2845,7 @@ export const ReportCardView: React.FC = () => {
                   onClick={() =>
                     handleDownloadPdfFromContainer(
                       batchSheetsWrapperRef.current,
-                      `Bundel_Rapor_Kelas_${currentClass?.name}_Sem${selectedSemester}`
+                      `Bundel_Rapor_${currentClass ? `Kelas_${currentClass.name}` : 'Semua_Kelas'}_Sem${selectedSemester}`
                     )
                   }
                   className={`btn-precision w-full sm:w-auto ${themeClasses.primary} ${themeClasses.primaryHover} text-white shadow-2xs disabled:opacity-60`}
@@ -2672,7 +2854,7 @@ export const ReportCardView: React.FC = () => {
                   <span>
                     {isGeneratingPdf
                       ? 'Menyusun PDF...'
-                      : `PDF Kelas (${classStudents.length})`}
+                      : `PDF (${classStudents.length})`}
                   </span>
                 </button>
                 <button

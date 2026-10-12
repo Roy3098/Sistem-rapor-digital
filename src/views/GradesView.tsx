@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Grade, TahfidzGrade } from '../types';
-import { getRadiusClass } from '../utils/theme';
+import { getRadiusClass, evaluateGradePredicate } from '../utils/theme';
 import {
   GraduationCap,
   BookOpen,
@@ -37,12 +37,14 @@ export const GradesView: React.FC = () => {
     deleteTahfidzGrade,
     setCurrentView,
     academicYear,
+    siteSettings,
     themeClasses,
     themeSettings,
     addToast,
   } = useApp();
 
   const radius = getRadiusClass(themeSettings.borderRadius);
+  const defaultSem: 1 | 2 = siteSettings.defaultSemester === 2 ? 2 : 1;
 
   // Main Section Tab: 'academic' (Nilai Mapel) vs 'tahfidz' (Hafalan Al-Quran) vs 'combined' (Ringkasan Terpadu)
   const [mainTab, setMainTab] = useState<'academic' | 'tahfidz' | 'combined'>(() =>
@@ -59,7 +61,7 @@ export const GradesView: React.FC = () => {
   const [academicMode, setAcademicMode] = useState<'input' | 'view'>('input');
   const [inputSubjectId, setInputSubjectId] = useState<string>('');
   const [inputClassId, setInputClassId] = useState<string>('');
-  const [inputSemester, setInputSemester] = useState<1 | 2>(1);
+  const [inputSemester, setInputSemester] = useState<1 | 2>(defaultSem);
   const [bulkScores, setBulkScores] = useState<Record<number, string>>({});
   const [quickScoreInput, setQuickScoreInput] = useState<string>('');
 
@@ -71,7 +73,13 @@ export const GradesView: React.FC = () => {
   // Tahfidz State
   const [tahfidzMode, setTahfidzMode] = useState<'input' | 'view'>('input');
   const [inputTahfidzClassId, setInputTahfidzClassId] = useState<string>('');
-  const [inputTahfidzSemester, setInputTahfidzSemester] = useState<1 | 2>(1);
+  const [inputTahfidzSemester, setInputTahfidzSemester] = useState<1 | 2>(defaultSem);
+
+  useEffect(() => {
+    const nextSem: 1 | 2 = siteSettings.defaultSemester === 2 ? 2 : 1;
+    setInputSemester(nextSem);
+    setInputTahfidzSemester(nextSem);
+  }, [siteSettings.defaultSemester]);
   const [studentTahfidzRecords, setStudentTahfidzRecords] = useState<
     Record<number, { notes: string; tahfidzScore: string; tajweedScore: string }>
   >({});
@@ -123,67 +131,46 @@ export const GradesView: React.FC = () => {
 
   const [confirmDeleteGradeId, setConfirmDeleteGradeId] = useState<number | null>(null);
   const [confirmDeleteTahfidzId, setConfirmDeleteTahfidzId] = useState<number | null>(null);
-  const [addingSingleSubjectId, setAddingSingleSubjectId] = useState<string>('');
-  const [addingSingleScore, setAddingSingleScore] = useState<string>('');
 
-  // 1. ACADEMIC STUDENTS FOR INPUT
-  const classStudentsForInput = useMemo(() => {
+  // 1. ACADEMIC STUDENTS FOR INPUT (Only show students whose grade for this Subject + Class + Semester is not yet saved)
+  const allClassStudentsForInput = useMemo(() => {
     if (!inputClassId) return [];
     return students.filter((s) => s.classId === parseInt(inputClassId, 10));
   }, [students, inputClassId]);
 
+  const classStudentsForInput = useMemo(() => {
+    if (!inputClassId) return [];
+    const clsId = parseInt(inputClassId, 10);
+    if (!inputSubjectId) {
+      return students.filter((s) => Number(s.classId) === clsId);
+    }
+    const subId = parseInt(inputSubjectId, 10);
+    const savedStudentIds = new Set(
+      grades
+        .filter(
+          (g) =>
+            Number(g.classId) === clsId &&
+            Number(g.subjectId) === subId &&
+            Number(g.semester) === Number(inputSemester)
+        )
+        .map((g) => Number(g.studentId))
+    );
+    return students.filter((s) => Number(s.classId) === clsId && !savedStudentIds.has(Number(s.id)));
+  }, [students, inputClassId, inputSubjectId, inputSemester, grades]);
+
   const handleLoadClassForInput = (clsId: string) => {
     setInputClassId(clsId);
-    if (!clsId || !inputSubjectId) return;
-
-    const matched = grades.filter(
-      (g) =>
-        g.classId === parseInt(clsId, 10) &&
-        g.subjectId === parseInt(inputSubjectId, 10) &&
-        g.semester === inputSemester
-    );
-
-    const initialMap: Record<number, string> = {};
-    matched.forEach((g) => {
-      initialMap[g.studentId] = g.score.toString();
-    });
-    setBulkScores(initialMap);
+    setBulkScores({});
   };
 
   const handleSubjectChange = (subId: string) => {
     setInputSubjectId(subId);
-    if (!inputClassId || !subId) return;
-
-    const matched = grades.filter(
-      (g) =>
-        g.classId === parseInt(inputClassId, 10) &&
-        g.subjectId === parseInt(subId, 10) &&
-        g.semester === inputSemester
-    );
-
-    const initialMap: Record<number, string> = {};
-    matched.forEach((g) => {
-      initialMap[g.studentId] = g.score.toString();
-    });
-    setBulkScores(initialMap);
+    setBulkScores({});
   };
 
   const handleSemesterChange = (sem: 1 | 2) => {
     setInputSemester(sem);
-    if (!inputClassId || !inputSubjectId) return;
-
-    const matched = grades.filter(
-      (g) =>
-        g.classId === parseInt(inputClassId, 10) &&
-        g.subjectId === parseInt(inputSubjectId, 10) &&
-        g.semester === sem
-    );
-
-    const initialMap: Record<number, string> = {};
-    matched.forEach((g) => {
-      initialMap[g.studentId] = g.score.toString();
-    });
-    setBulkScores(initialMap);
+    setBulkScores({});
   };
 
   const handleBulkSubmit = (e: React.FormEvent) => {
@@ -191,12 +178,20 @@ export const GradesView: React.FC = () => {
     if (!inputSubjectId || !inputClassId) return;
 
     const numericMap: Record<number, number> = {};
-    Object.entries(bulkScores).forEach(([sId, val]) => {
-      const num = parseFloat(val);
-      if (!isNaN(num) && num >= 0 && num <= 100) {
-        numericMap[parseInt(sId, 10)] = num;
+    classStudentsForInput.forEach((st) => {
+      const rawVal = bulkScores[st.id];
+      if (rawVal !== undefined && rawVal !== '') {
+        const num = parseFloat(rawVal);
+        if (!isNaN(num) && num >= 0 && num <= 90) {
+          numericMap[st.id] = Math.min(90, Math.max(0, num));
+        }
       }
     });
+
+    if (Object.keys(numericMap).length === 0) {
+      addToast('Masukkan minimal 1 nilai santri terlebih dahulu (skala 0 - 90).', 'error');
+      return;
+    }
 
     saveBulkGrades(
       parseInt(inputSubjectId, 10),
@@ -204,60 +199,57 @@ export const GradesView: React.FC = () => {
       inputSemester,
       numericMap
     );
+
+    setBulkScores((prev) => {
+      const next = { ...prev };
+      Object.keys(numericMap).forEach((sId) => {
+        delete next[parseInt(sId, 10)];
+      });
+      return next;
+    });
   };
 
   const applyQuickFill = () => {
     const val = parseFloat(quickScoreInput);
-    if (isNaN(val) || val < 0 || val > 100) return;
+    if (isNaN(val) || val < 0 || val > 90) {
+      addToast('Nilai cepat harus berada di antara 0 hingga 90.', 'error');
+      return;
+    }
+    const clampedStr = Math.min(90, Math.max(0, val)).toString();
     const newMap: Record<number, string> = {};
     classStudentsForInput.forEach((s) => {
-      newMap[s.id] = quickScoreInput;
+      newMap[s.id] = clampedStr;
     });
     setBulkScores(newMap);
   };
 
-  // 2. TAHFIDZ STUDENTS FOR INPUT
+  // 2. TAHFIDZ STUDENTS FOR INPUT (Only show students whose Tahfidz grade for this Class + Semester is not yet saved)
+  const allClassStudentsForTahfidz = useMemo(() => {
+    if (!inputTahfidzClassId) return [];
+    return students.filter((s) => Number(s.classId) === parseInt(inputTahfidzClassId, 10));
+  }, [students, inputTahfidzClassId]);
+
   const classStudentsForTahfidz = useMemo(() => {
     if (!inputTahfidzClassId) return [];
-    return students.filter((s) => s.classId === parseInt(inputTahfidzClassId, 10));
-  }, [students, inputTahfidzClassId]);
+    const clsId = parseInt(inputTahfidzClassId, 10);
+    const savedStudentIds = new Set(
+      tahfidzGrades
+        .filter(
+          (t) => Number(t.classId) === clsId && Number(t.semester) === Number(inputTahfidzSemester)
+        )
+        .map((t) => Number(t.studentId))
+    );
+    return students.filter((s) => Number(s.classId) === clsId && !savedStudentIds.has(Number(s.id)));
+  }, [students, inputTahfidzClassId, inputTahfidzSemester, tahfidzGrades]);
 
   const handleTahfidzClassSelect = (clsId: string) => {
     setInputTahfidzClassId(clsId);
-    if (!clsId) return;
-
-    const matched = tahfidzGrades.filter(
-      (t) => t.classId === parseInt(clsId, 10) && t.semester === inputTahfidzSemester
-    );
-
-    const initialMap: typeof studentTahfidzRecords = {};
-    matched.forEach((t) => {
-      initialMap[t.studentId] = {
-        notes: t.notes,
-        tahfidzScore: t.tahfidzScore.toString(),
-        tajweedScore: t.tajweedScore.toString(),
-      };
-    });
-    setStudentTahfidzRecords(initialMap);
+    setStudentTahfidzRecords({});
   };
 
   const handleTahfidzSemesterChange = (sem: 1 | 2) => {
     setInputTahfidzSemester(sem);
-    if (!inputTahfidzClassId) return;
-
-    const matched = tahfidzGrades.filter(
-      (t) => t.classId === parseInt(inputTahfidzClassId, 10) && t.semester === sem
-    );
-
-    const initialMap: typeof studentTahfidzRecords = {};
-    matched.forEach((t) => {
-      initialMap[t.studentId] = {
-        notes: t.notes,
-        tahfidzScore: t.tahfidzScore.toString(),
-        tajweedScore: t.tajweedScore.toString(),
-      };
-    });
-    setStudentTahfidzRecords(initialMap);
+    setStudentTahfidzRecords({});
   };
 
   const handleBulkTahfidzSubmit = (e: React.FormEvent) => {
@@ -271,14 +263,15 @@ export const GradesView: React.FC = () => {
       tajweedScore: number;
     }> = [];
 
-    Object.entries(studentTahfidzRecords).forEach(([sIdStr, record]) => {
-      const studentId = parseInt(sIdStr, 10);
+    classStudentsForTahfidz.forEach((st) => {
+      const record = studentTahfidzRecords[st.id];
+      if (!record) return;
       const tfz = parseFloat(record.tahfidzScore);
       const tjw = parseFloat(record.tajweedScore);
 
       if (!isNaN(tfz) && !isNaN(tjw) && tfz >= 1 && tfz <= 90 && tjw >= 1 && tjw <= 90) {
         recordsToSave.push({
-          studentId,
+          studentId: st.id,
           notes: record.notes.trim(),
           tahfidzScore: tfz,
           tajweedScore: tjw,
@@ -292,15 +285,25 @@ export const GradesView: React.FC = () => {
     }
 
     saveBulkTahfidz(parseInt(inputTahfidzClassId, 10), inputTahfidzSemester, recordsToSave);
+
+    setStudentTahfidzRecords((prev) => {
+      const next = { ...prev };
+      recordsToSave.forEach((r) => {
+        delete next[r.studentId];
+      });
+      return next;
+    });
   };
 
-  // Predicates
+  // Predicates (configured in Super Admin)
   const getGradePredicate = (score: number) => {
-    if (score >= 86) return { letter: 'A', text: 'Mumtaz', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
-    if (score >= 81) return { letter: 'B', text: 'Jayyid Jiddan', color: 'text-sky-700 bg-sky-50 border-sky-200' };
-    if (score >= 71) return { letter: 'C', text: 'Jayyid', color: 'text-amber-700 bg-amber-50 border-amber-200' };
-    if (score >= 60) return { letter: 'D', text: 'Maqbul', color: 'text-orange-700 bg-orange-50 border-orange-200' };
-    return { letter: 'E', text: 'Risib', color: 'text-rose-700 bg-rose-50 border-rose-200' };
+    const evalPred = evaluateGradePredicate(score, siteSettings.gradeThresholds);
+    return {
+      letter: evalPred.letter,
+      text: evalPred.shortText,
+      fullText: evalPred.text,
+      color: evalPred.color,
+    };
   };
 
   // Grouped Academic Grades
@@ -697,10 +700,24 @@ export const GradesView: React.FC = () => {
                           type="number"
                           min="0"
                           max="90"
-                          placeholder="Nilai cepat"
+                          placeholder="Nilai cepat (0-90)"
                           value={quickScoreInput}
-                          onChange={(e) => setQuickScoreInput(e.target.value)}
-                          className="filter-control w-full sm:w-28 text-center tabular-nums"
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === '') {
+                              setQuickScoreInput('');
+                              return;
+                            }
+                            const n = parseFloat(raw);
+                            if (!isNaN(n) && n > 90) {
+                              setQuickScoreInput('90');
+                            } else if (!isNaN(n) && n < 0) {
+                              setQuickScoreInput('0');
+                            } else {
+                              setQuickScoreInput(raw);
+                            }
+                          }}
+                          className="filter-control w-full sm:w-32 text-center tabular-nums"
                         />
                         <button
                           type="button"
@@ -712,9 +729,24 @@ export const GradesView: React.FC = () => {
                       </div>
                     </div>
 
-                    {classStudentsForInput.length === 0 ? (
+                    {allClassStudentsForInput.length === 0 ? (
                       <div className="text-center py-8 text-xs text-slate-500 border border-dashed rounded-xl">
                         Belum ada santri di kelas ini.
+                      </div>
+                    ) : classStudentsForInput.length === 0 ? (
+                      <div className="text-center py-8 px-4 text-xs text-slate-600 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-2.5">
+                        <FileCheck2 className="w-7 h-7 text-emerald-600 mx-auto" />
+                        <p className="font-semibold text-slate-800">
+                          Seluruh nilai santri di kelas ini untuk mata pelajaran & semester yang dipilih telah tersimpan.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setAcademicMode('view')}
+                          className={`btn-precision-sm mx-auto ${themeClasses.primary} text-white px-3.5 py-1.5 rounded-lg`}
+                        >
+                          <span>Lihat di Rekap Kelas</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     ) : (
                       <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
@@ -751,12 +783,24 @@ export const GradesView: React.FC = () => {
                                   step="0.5"
                                   placeholder="0-90"
                                   value={val}
-                                  onChange={(e) =>
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    if (raw === '') {
+                                      setBulkScores((prev) => ({ ...prev, [st.id]: '' }));
+                                      return;
+                                    }
+                                    const n = parseFloat(raw);
+                                    const clamped =
+                                      !isNaN(n) && n > 90
+                                        ? '90'
+                                        : !isNaN(n) && n < 0
+                                        ? '0'
+                                        : raw;
                                     setBulkScores((prev) => ({
                                       ...prev,
-                                      [st.id]: e.target.value,
-                                    }))
-                                  }
+                                      [st.id]: clamped,
+                                    }));
+                                  }}
                                   className="w-24 h-9 px-3 bg-white border border-slate-300 rounded-lg text-xs font-bold text-center tabular-nums focus:outline-none"
                                 />
                               </div>
@@ -986,7 +1030,7 @@ export const GradesView: React.FC = () => {
             </div>
 
             <span className="text-[11px] text-slate-500 hidden sm:inline px-2">
-              Standar Hafalan: <strong>Mutqin (1-100)</strong>
+              Standar Hafalan: <strong>Mutqin (1-90)</strong>
             </span>
           </div>
 
@@ -1048,9 +1092,24 @@ export const GradesView: React.FC = () => {
                       </p>
                     </div>
 
-                    {classStudentsForTahfidz.length === 0 ? (
+                    {allClassStudentsForTahfidz.length === 0 ? (
                       <div className="text-center py-8 text-xs text-slate-500 border border-dashed rounded-xl">
                         Belum ada santri di kelas ini.
+                      </div>
+                    ) : classStudentsForTahfidz.length === 0 ? (
+                      <div className="text-center py-8 px-4 text-xs text-slate-600 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-2.5">
+                        <FileCheck2 className="w-7 h-7 text-emerald-600 mx-auto" />
+                        <p className="font-semibold text-slate-800">
+                          Seluruh nilai tahfidz santri di kelas ini pada semester yang dipilih telah tersimpan.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setTahfidzMode('view')}
+                          className={`btn-precision-sm mx-auto ${themeClasses.primary} text-white px-3.5 py-1.5 rounded-lg`}
+                        >
+                          <span>Lihat di Rekap Tahfidz</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     ) : (
                       <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
@@ -1100,53 +1159,73 @@ export const GradesView: React.FC = () => {
                               </div>
 
                               <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                  <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                                    Nilai Tahfidz / Kelancaran (Maks 90)
-                                  </label>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    max="90"
-                                    placeholder="1 - 90"
-                                    value={rec.tahfidzScore}
-                                    onChange={(e) =>
-                                      setStudentTahfidzRecords((prev) => ({
-                                        ...prev,
-                                        [st.id]: {
-                                          ...rec,
-                                          tahfidzScore: e.target.value,
-                                        },
-                                      }))
-                                    }
-                                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center tabular-nums text-emerald-800 focus:outline-none"
-                                  />
-                                </div>
+                                  <div>
+                                    <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                                      Nilai Tahfidz / Kelancaran (Maks 90)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      max="90"
+                                      placeholder="1 - 90"
+                                      value={rec.tahfidzScore}
+                                      onChange={(e) => {
+                                        const raw = e.target.value;
+                                        const n = parseFloat(raw);
+                                        const clamped =
+                                          raw === ''
+                                            ? ''
+                                            : !isNaN(n) && n > 90
+                                            ? '90'
+                                            : !isNaN(n) && n < 0
+                                            ? '0'
+                                            : raw;
+                                        setStudentTahfidzRecords((prev) => ({
+                                          ...prev,
+                                          [st.id]: {
+                                            ...rec,
+                                            tahfidzScore: clamped,
+                                          },
+                                        }));
+                                      }}
+                                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center tabular-nums text-emerald-800 focus:outline-none"
+                                    />
+                                  </div>
 
-                                <div>
-                                  <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                                    Nilai Tajwid & Makhorijul (Maks 90)
-                                  </label>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    max="90"
-                                    placeholder="1 - 90"
-                                    value={rec.tajweedScore}
-                                    onChange={(e) =>
-                                      setStudentTahfidzRecords((prev) => ({
-                                        ...prev,
-                                        [st.id]: {
-                                          ...rec,
-                                          tajweedScore: e.target.value,
-                                        },
-                                      }))
-                                    }
-                                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center tabular-nums text-sky-800 focus:outline-none"
-                                  />
+                                  <div>
+                                    <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                                      Nilai Tajwid & Makhorijul (Maks 90)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      max="90"
+                                      placeholder="1 - 90"
+                                      value={rec.tajweedScore}
+                                      onChange={(e) => {
+                                        const raw = e.target.value;
+                                        const n = parseFloat(raw);
+                                        const clamped =
+                                          raw === ''
+                                            ? ''
+                                            : !isNaN(n) && n > 90
+                                            ? '90'
+                                            : !isNaN(n) && n < 0
+                                            ? '0'
+                                            : raw;
+                                        setStudentTahfidzRecords((prev) => ({
+                                          ...prev,
+                                          [st.id]: {
+                                            ...rec,
+                                            tajweedScore: clamped,
+                                          },
+                                        }));
+                                      }}
+                                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center tabular-nums text-sky-800 focus:outline-none"
+                                    />
+                                  </div>
                                 </div>
                               </div>
-                            </div>
                           );
                         })}
                       </div>
@@ -1290,7 +1369,7 @@ export const GradesView: React.FC = () => {
                                     <span className="text-[11px] text-slate-500">NIS: {item.studentNis}</span>
                                   </div>
                                   <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg border ${pred.color}`}>
-                                    {pred.text} ({item.gradeLetter})
+                                    {pred.text} ({pred.letter})
                                   </span>
                                 </div>
 
@@ -1509,7 +1588,7 @@ export const GradesView: React.FC = () => {
                     <td className="py-2.5 px-3 text-center tabular-nums font-bold">
                       {item.tahfidzGrade ? (
                         <span className={`${themeClasses.badge} px-2 py-0.5 rounded-md border`}>
-                          {item.tahfidzGrade.totalScore} ({item.tahfidzGrade.gradeLetter})
+                          {item.tahfidzGrade.totalScore} ({getGradePredicate(item.tahfidzGrade.totalScore).letter})
                         </span>
                       ) : (
                         <span className="text-slate-400">-</span>
@@ -1571,87 +1650,6 @@ export const GradesView: React.FC = () => {
                       (selectedStudentDetail.grades.length || 1)
                     ).toFixed(1)}
                   </span>
-                </div>
-              </div>
-
-              {/* Quick Add Single Subject Grade */}
-              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-                <h4 className="text-xs font-bold text-slate-800">Tambah / Perbarui Nilai Mapel Santri Ini</h4>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                  <select
-                    value={addingSingleSubjectId}
-                    onChange={(e) => setAddingSingleSubjectId(e.target.value)}
-                    className="h-9 flex-1 px-3 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 font-medium focus:outline-none"
-                  >
-                    <option value="">-- Pilih Mapel --</option>
-                    {subjects.map((sub) => (
-                      <option key={sub.id} value={sub.id}>
-                        {sub.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min="0"
-                    max="90"
-                    step="0.5"
-                    placeholder="Nilai (0-90)"
-                    value={addingSingleScore}
-                    onChange={(e) => setAddingSingleScore(e.target.value)}
-                    className="h-9 w-full sm:w-28 px-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center tabular-nums focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const subId = parseInt(addingSingleSubjectId, 10);
-                      const sc = parseFloat(addingSingleScore);
-                      if (isNaN(subId) || isNaN(sc) || sc < 0 || sc > 90) {
-                        addToast('Pilih mata pelajaran dan masukkan nilai 0-90', 'error');
-                        return;
-                      }
-                      saveBulkGrades(
-                        subId,
-                        selectedStudentDetail.classId,
-                        selectedStudentDetail.semester,
-                        { [selectedStudentDetail.studentId]: sc }
-                      );
-                      const subObj = subjects.find((s) => s.id === subId);
-                      setSelectedStudentDetail((prev) => {
-                        if (!prev) return null;
-                        const exists = prev.grades.find((item) => item.subjectId === subId);
-                        if (exists) {
-                          return {
-                            ...prev,
-                            grades: prev.grades.map((item) =>
-                              item.subjectId === subId ? { ...item, score: sc } : item
-                            ),
-                          };
-                        }
-                        return {
-                          ...prev,
-                          grades: [
-                            ...prev.grades,
-                            {
-                              id: Date.now(),
-                              studentId: prev.studentId,
-                              classId: prev.classId,
-                              subjectId: subId,
-                              semester: prev.semester,
-                              score: sc,
-                              testDate: new Date().toISOString().split('T')[0],
-                              type: 'regular',
-                              subjectName: subObj ? subObj.name : `Mapel #${subId}`,
-                            },
-                          ],
-                        };
-                      });
-                      setAddingSingleSubjectId('');
-                      setAddingSingleScore('');
-                    }}
-                    className={`h-9 px-3.5 ${themeClasses.primary} ${themeClasses.primaryHover} text-white rounded-lg text-xs font-semibold whitespace-nowrap cursor-pointer`}
-                  >
-                    + Simpan
-                  </button>
                 </div>
               </div>
 
@@ -1764,7 +1762,19 @@ export const GradesView: React.FC = () => {
                   max="90"
                   step="0.5"
                   value={newEditScore}
-                  onChange={(e) => setNewEditScore(e.target.value)}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    const n = parseFloat(raw);
+                    if (raw === '') {
+                      setNewEditScore('');
+                    } else if (!isNaN(n) && n > 90) {
+                      setNewEditScore('90');
+                    } else if (!isNaN(n) && n < 0) {
+                      setNewEditScore('0');
+                    } else {
+                      setNewEditScore(raw);
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm font-bold text-center tabular-nums focus:outline-none"
                 />
               </div>
@@ -1779,14 +1789,15 @@ export const GradesView: React.FC = () => {
                   onClick={() => {
                     const sc = parseFloat(newEditScore);
                     if (!isNaN(sc) && sc >= 0 && sc <= 90) {
-                      updateGrade(editingGrade.id, sc);
+                      const clampedSc = Math.min(90, Math.max(0, sc));
+                      updateGrade(editingGrade.id, clampedSc);
                       if (selectedStudentDetail) {
                         setSelectedStudentDetail((prev) =>
                           prev
                             ? {
                                 ...prev,
                                 grades: prev.grades.map((item) =>
-                                  item.id === editingGrade.id ? { ...item, score: sc } : item
+                                  item.id === editingGrade.id ? { ...item, score: clampedSc } : item
                                 ),
                               }
                             : null
@@ -1845,7 +1856,7 @@ export const GradesView: React.FC = () => {
                     {tahfidzDetailModal.grade.totalScore}
                   </span>
                   <span className={`text-xs font-bold ${themeClasses.primaryText} block mt-0.5`}>
-                    Predikat: {getGradePredicate(tahfidzDetailModal.grade.totalScore).text} ({tahfidzDetailModal.grade.gradeLetter})
+                    Predikat: {getGradePredicate(tahfidzDetailModal.grade.totalScore).text} ({getGradePredicate(tahfidzDetailModal.grade.totalScore).letter})
                   </span>
                 </div>
               </div>
@@ -1905,7 +1916,12 @@ export const GradesView: React.FC = () => {
                     value={editingTahfidzItem.tahfidzScore}
                     onChange={(e) =>
                       setEditingTahfidzItem((prev) =>
-                        prev ? { ...prev, tahfidzScore: parseFloat(e.target.value) || 0 } : null
+                        prev
+                          ? {
+                              ...prev,
+                              tahfidzScore: Math.min(90, Math.max(0, parseFloat(e.target.value) || 0)),
+                            }
+                          : null
                       )
                     }
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold text-center tabular-nums focus:outline-none"
@@ -1921,7 +1937,12 @@ export const GradesView: React.FC = () => {
                     value={editingTahfidzItem.tajweedScore}
                     onChange={(e) =>
                       setEditingTahfidzItem((prev) =>
-                        prev ? { ...prev, tajweedScore: parseFloat(e.target.value) || 0 } : null
+                        prev
+                          ? {
+                              ...prev,
+                              tajweedScore: Math.min(90, Math.max(0, parseFloat(e.target.value) || 0)),
+                            }
+                          : null
                       )
                     }
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold text-center tabular-nums focus:outline-none"

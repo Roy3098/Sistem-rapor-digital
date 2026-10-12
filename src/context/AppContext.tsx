@@ -110,6 +110,7 @@ import {
   applyThemeCssVariables,
   normalizeThemeSettings,
   isDarkSurfaceMode,
+  evaluateGradePredicate,
 } from '../utils/theme';
 
 export type AppView =
@@ -551,10 +552,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const teacherAttendanceRef = useRef<TeacherAttendanceRecord[]>(teacherAttendance);
   const teachingAssignmentsRef = useRef<TeachingAssignment[]>(teachingAssignments);
   const hasRemoteWorkspaceRef = useRef<boolean>(false);
+  const hasHydratedGlobalConfigRef = useRef<boolean>(false);
+  const lastAppliedRemoteUpdateRef = useRef<number>(0);
 
   const lastLocalConfigWriteRef = useRef<number>(0);
   const configSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const verifiedParentDocsRef = useRef<Set<string>>(new Set());
+
+  const clampScore90 = (val: number): number => {
+    const num = Number(val);
+    if (isNaN(num)) return 0;
+    return Math.min(90, Math.max(0, Math.round(num * 10) / 10));
+  };
+
+  const normalizeGradesList = (list: Grade[], studentList: Student[] = studentsRef.current): Grade[] => {
+    if (!Array.isArray(list)) return [];
+    const studentClassMap = new Map<number, number>();
+    studentList.forEach((st) => {
+      if (st && typeof st.id === 'number' && typeof st.classId === 'number') {
+        studentClassMap.set(st.id, st.classId);
+      }
+    });
+    const dedupMap = new Map<string, Grade>();
+    list.forEach((g) => {
+      if (!g || typeof g.studentId !== 'number' || typeof g.subjectId !== 'number') return;
+      const sem: 1 | 2 = Number(g.semester) === 2 ? 2 : 1;
+      const resolvedClassId = studentClassMap.get(g.studentId) ?? Number(g.classId) ?? 1;
+      const key = `${g.studentId}_${g.subjectId}_${sem}`;
+      dedupMap.set(key, {
+        ...g,
+        classId: resolvedClassId,
+        semester: sem,
+        score: clampScore90(g.score),
+      });
+    });
+    return Array.from(dedupMap.values());
+  };
+
+  const normalizeTahfidzList = (
+    list: TahfidzGrade[],
+    studentList: Student[] = studentsRef.current
+  ): TahfidzGrade[] => {
+    if (!Array.isArray(list)) return [];
+    const studentClassMap = new Map<number, number>();
+    studentList.forEach((st) => {
+      if (st && typeof st.id === 'number' && typeof st.classId === 'number') {
+        studentClassMap.set(st.id, st.classId);
+      }
+    });
+    const dedupMap = new Map<string, TahfidzGrade>();
+    list.forEach((t) => {
+      if (!t || typeof t.studentId !== 'number') return;
+      const sem: 1 | 2 = Number(t.semester) === 2 ? 2 : 1;
+      const resolvedClassId = studentClassMap.get(t.studentId) ?? Number(t.classId) ?? 1;
+      const tfzScore = clampScore90(t.tahfidzScore);
+      const tjwScore = clampScore90(t.tajweedScore);
+      const totScore = clampScore90(Math.round((tfzScore + tjwScore) / 2));
+      const key = `${t.studentId}_${sem}`;
+      dedupMap.set(key, {
+        ...t,
+        classId: resolvedClassId,
+        semester: sem,
+        tahfidzScore: tfzScore,
+        tajweedScore: tjwScore,
+        totalScore: totScore,
+        gradeLetter: evaluateGradePredicate(totScore, siteSettingsRef.current.gradeThresholds).letter,
+      });
+    });
+    return Array.from(dedupMap.values());
+  };
 
   currentUserRef.current = currentUser;
   usersRef.current = users;
@@ -633,26 +699,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     targetUserToUpsert?: User,
     deletedList?: string[]
   ) => {
-    refreshGlobalDatabaseCache(nextUsers, deletedList);
     const effectiveUid = auth.currentUser?.uid || 'global_registry';
-    if (!isFirestoreQuotaExhausted()) {
-      if (targetUserToUpsert) {
-        syncUserProfileToFirestore(effectiveUid, targetUserToUpsert)
-          .then(() => {
-            setIsCloudSynced(true);
-            markSynced();
-          })
-          .catch(() => {});
-      }
-      lastLocalConfigWriteRef.current = Date.now();
+    if (isFirestoreQuotaExhausted()) return;
+
+    if (targetUserToUpsert) {
+      syncUserProfileToFirestore(effectiveUid, targetUserToUpsert)
+        .then(() => {
+          setIsCloudSynced(true);
+          markSynced();
+        })
+        .catch(() => {});
+    }
+
+    const performConfigSync = () => {
+      const mergedNow = mergeUserLists(
+        [INITIAL_USERS, usersRef.current, nextUsers],
+        deletedList || deletedUsernamesRef.current
+      );
+      usersRef.current = mergedNow;
+      setUsers(mergedNow);
+      localStorage.setItem('bw_users_list', JSON.stringify(mergedNow));
+      refreshGlobalDatabaseCache(mergedNow, deletedList);
+      const writeTs = Date.now();
+      lastLocalConfigWriteRef.current = writeTs;
       syncSchoolConfigToFirestore(
         effectiveUid,
         siteSettingsRef.current,
         themeSettingsRef.current,
         academicYearRef.current,
-        Date.now(),
+        writeTs,
         {
-          users: nextUsers,
+          users: mergedNow,
           deletedUsernames: deletedList || deletedUsernamesRef.current,
         }
       )
@@ -661,6 +738,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           markSynced();
         })
         .catch(() => {});
+    };
+
+    if (!hasHydratedGlobalConfigRef.current) {
+      getDocFromServer(doc(db, 'school_configs', GLOBAL_SCHOOL_CONFIG_DOC_ID))
+        .then((snap) => {
+          if (snap.exists()) {
+            markDocKnownInFirestore('school_configs', GLOBAL_SCHOOL_CONFIG_DOC_ID);
+            applyRemoteSchoolConfig(snap.data());
+          }
+          hasHydratedGlobalConfigRef.current = true;
+        })
+        .catch(() => {})
+        .finally(() => {
+          performConfigSync();
+        });
+    } else {
+      performConfigSync();
     }
   };
 
@@ -668,30 +762,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const {
       siteExtra,
       themeExtra,
+      updatedAtMs,
       users: remoteConfigUsers,
       deletedUsernames: remoteDeletedUsernames,
       workspace: remoteWorkspace,
     } = parseExtendedSchoolConfig(d);
+    hasHydratedGlobalConfigRef.current = true;
+    if (updatedAtMs > 0) {
+      lastAppliedRemoteUpdateRef.current = updatedAtMs;
+    }
     const nextYear = String(d.academicYear || '2025/2026');
     academicYearRef.current = nextYear;
     setAcademicYearState(nextYear);
 
     // 1. Reconcile deleted usernames & all user accounts from database
     let effectiveDeleted = deletedUsernamesRef.current;
-    if (Array.isArray(remoteDeletedUsernames) && remoteDeletedUsernames.length > 0) {
+    if (Array.isArray(remoteDeletedUsernames)) {
       effectiveDeleted = Array.from(
         new Set([...deletedUsernamesRef.current, ...remoteDeletedUsernames])
-      ).filter((u) => u && u !== 'superadmin');
+      )
+        .map((u) => String(u || '').toLowerCase().trim())
+        .filter((u) => u && u !== 'superadmin');
       deletedUsernamesRef.current = effectiveDeleted;
       setDeletedUsernames(effectiveDeleted);
       localStorage.setItem('bw_deleted_usernames', JSON.stringify(effectiveDeleted));
     }
 
+    const deletedSet = new Set(effectiveDeleted.map((u) => u.toLowerCase().trim()));
+
     if (Array.isArray(remoteConfigUsers) && remoteConfigUsers.length > 0) {
       const nextPasswords = { ...userPasswordsRef.current };
       let passwordsChanged = false;
+
+      // Remove passwords of any deleted accounts so old credentials are wiped
+      effectiveDeleted.forEach((delKey) => {
+        if (delKey !== 'superadmin' && delKey in nextPasswords) {
+          delete nextPasswords[delKey];
+          passwordsChanged = true;
+        }
+      });
+
       remoteConfigUsers.forEach((ru) => {
         const cleanU = String(ru.username || '').toLowerCase().trim();
+        const cleanE = String(ru.email || '').toLowerCase().trim();
+        if (deletedSet.has(cleanU) || (cleanE && deletedSet.has(cleanE))) {
+          return;
+        }
         if (cleanU && ru.password && nextPasswords[cleanU] !== ru.password) {
           nextPasswords[cleanU] = String(ru.password);
           passwordsChanged = true;
@@ -710,6 +826,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       usersRef.current = mergedAccounts;
       setUsers(mergedAccounts);
       localStorage.setItem('bw_users_list', JSON.stringify(mergedAccounts));
+
+      // If the currently logged-in user was deleted by Super Admin, immediately terminate their session & reset local profile
+      const curr = currentUserRef.current;
+      if (curr && !isSuperAdminAccount(curr)) {
+        const currU = curr.username.toLowerCase().trim();
+        const currE = (curr.email || '').toLowerCase().trim();
+        const activeAccount = mergedAccounts.find(
+          (u) =>
+            u.id === curr.id ||
+            u.username.toLowerCase().trim() === currU ||
+            (currE && u.email?.toLowerCase().trim() === currE)
+        );
+        if (deletedSet.has(currU) || (currE && deletedSet.has(currE)) || !activeAccount) {
+          currentUserRef.current = null;
+          setCurrentUser(null);
+          localStorage.removeItem('bw_user');
+          localStorage.setItem('bw_explicit_logout', '1');
+          signOut(auth).catch(() => {});
+        } else if (activeAccount) {
+          currentUserRef.current = activeAccount;
+          setCurrentUser(activeAccount);
+          localStorage.setItem('bw_user', JSON.stringify(activeAccount));
+        }
+      }
     }
 
     // 2. Hydrate shared school workspace tables from global_config for ALL users (Google & local)
@@ -725,20 +865,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSubjects(remoteWorkspace.subjects);
         localStorage.setItem('bw_subjects', JSON.stringify(remoteWorkspace.subjects));
       }
+      const activeStudentList =
+        Array.isArray(remoteWorkspace.students) && remoteWorkspace.students.length > 0
+          ? remoteWorkspace.students
+          : studentsRef.current;
       if (Array.isArray(remoteWorkspace.students) && remoteWorkspace.students.length > 0) {
         studentsRef.current = remoteWorkspace.students;
         setStudents(remoteWorkspace.students);
         localStorage.setItem('bw_students', JSON.stringify(remoteWorkspace.students));
       }
       if (Array.isArray(remoteWorkspace.grades)) {
-        gradesRef.current = remoteWorkspace.grades;
-        setGrades(remoteWorkspace.grades);
-        localStorage.setItem('bw_grades', JSON.stringify(remoteWorkspace.grades));
+        const normalizedGrades = normalizeGradesList(remoteWorkspace.grades, activeStudentList);
+        gradesRef.current = normalizedGrades;
+        setGrades(normalizedGrades);
+        localStorage.setItem('bw_grades', JSON.stringify(normalizedGrades));
       }
       if (Array.isArray(remoteWorkspace.tahfidzGrades)) {
-        tahfidzGradesRef.current = remoteWorkspace.tahfidzGrades;
-        setTahfidzGrades(remoteWorkspace.tahfidzGrades);
-        localStorage.setItem('bw_tahfidz', JSON.stringify(remoteWorkspace.tahfidzGrades));
+        const normalizedTahfidz = normalizeTahfidzList(
+          remoteWorkspace.tahfidzGrades,
+          activeStudentList
+        );
+        tahfidzGradesRef.current = normalizedTahfidz;
+        setTahfidzGrades(normalizedTahfidz);
+        localStorage.setItem('bw_tahfidz', JSON.stringify(normalizedTahfidz));
       }
       if (Array.isArray(remoteWorkspace.reportCards)) {
         reportCardsRef.current = remoteWorkspace.reportCards;
@@ -794,6 +943,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         customLogoUrl: String(d.customLogoUrl || prev.customLogoUrl || ''),
       };
       siteSettingsRef.current = nextSite;
+      localStorage.setItem('bw_site_settings', JSON.stringify(nextSite));
       return nextSite;
     });
 
@@ -877,32 +1027,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     markSynced();
   };
 
-  // Debounced unified school_configs & workspace sync across all users
-  const scheduleSchoolConfigSync = () => {
+  // Debounced or immediate unified school_configs & workspace sync across all users
+  const scheduleSchoolConfigSync = (immediate = false) => {
     refreshGlobalDatabaseCache();
     if (isFirestoreQuotaExhausted()) return;
-    lastLocalConfigWriteRef.current = Date.now();
+    const writeTs = Date.now();
+    lastLocalConfigWriteRef.current = writeTs;
     if (configSyncTimerRef.current) {
       clearTimeout(configSyncTimerRef.current);
+      configSyncTimerRef.current = null;
     }
-    configSyncTimerRef.current = setTimeout(async () => {
+
+    const executeSync = async () => {
       if (isFirestoreQuotaExhausted()) return;
       refreshGlobalDatabaseCache();
       const uid = auth.currentUser?.uid || 'superadmin_global';
+      const syncTs = Date.now();
+      lastLocalConfigWriteRef.current = syncTs;
       try {
         setIsSyncing(true);
         await syncSchoolConfigToFirestore(
           uid,
           siteSettingsRef.current,
           themeSettingsRef.current,
-          academicYearRef.current
+          academicYearRef.current,
+          syncTs
         );
         setIsCloudSynced(true);
         markSynced();
       } finally {
         setIsSyncing(false);
       }
-    }, 350);
+    };
+
+    if (immediate) {
+      configSyncTimerRef.current = setTimeout(executeSync, 40);
+    } else {
+      configSyncTimerRef.current = setTimeout(executeSync, 280);
+    }
   };
 
   // Ensure parent Class, Subject, and Student exist in Firestore before writing child documents (Pillar 1 Master Gate)
@@ -1107,6 +1269,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ) => {
     if (!docs || docs.length === 0) return;
     const effectiveUid = auth.currentUser?.uid || 'global_registry';
+    const deletedSet = new Set(
+      deletedUsernamesRef.current.map((u) => String(u || '').toLowerCase().trim()).filter(Boolean)
+    );
     const validUsers: User[] = [];
 
     docs.forEach((docSnap) => {
@@ -1115,7 +1280,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const username = String(d.username || '')
         .toLowerCase()
         .trim();
+      const email = String(d.email || '')
+        .toLowerCase()
+        .trim();
       if (!username) return;
+
+      // If this document belongs to a deleted account, purge it from Firestore /users immediately and skip
+      if (
+        username !== 'superadmin' &&
+        (deletedSet.has(username) || (email && deletedSet.has(email)))
+      ) {
+        if (!isFirestoreQuotaExhausted()) {
+          deleteFirestoreDoc('users', docSnap.id).catch(() => {});
+        }
+        return;
+      }
+
       const cleanId = normalizeUserId(String(d.docId || docSnap.id), username);
       const mapped = normalizeUserRecord({
         id: cleanId,
@@ -1140,7 +1320,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const prevCount = usersRef.current.length;
     const merged = mergeUserLists(
-      [INITIAL_USERS, usersRef.current, validUsers],
+      [INITIAL_USERS, validUsers, usersRef.current],
       deletedUsernamesRef.current
     );
     usersRef.current = merged;
@@ -1167,6 +1347,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshGlobalDatabaseCache();
     const globalConfigRef = doc(db, 'school_configs', GLOBAL_SCHOOL_CONFIG_DOC_ID);
     const usersColRef = collection(db, 'users');
+    let globalConfigReady = false;
 
     // Validate connection to Firestore server on boot & immediately load global config + all /users accounts
     const verifyAndFetchGlobalConfig = async () => {
@@ -1189,6 +1370,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } catch {
           // Ignore fallback read error
         }
+      } finally {
+        globalConfigReady = true;
       }
 
       try {
@@ -1205,15 +1388,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const unsubscribeGlobal = onSnapshot(
       globalConfigRef,
       (snap) => {
+        globalConfigReady = true;
+        hasHydratedGlobalConfigRef.current = true;
         if (snap.exists()) {
           markDocKnownInFirestore('school_configs', GLOBAL_SCHOOL_CONFIG_DOC_ID);
+          if (snap.metadata.hasPendingWrites) {
+            return;
+          }
+          const data = snap.data();
+          const parsedExt = parseExtendedSchoolConfig(data);
           if (
-            snap.metadata.hasPendingWrites ||
-            Date.now() - lastLocalConfigWriteRef.current < 1500
+            parsedExt.updatedAtMs > 0 &&
+            parsedExt.updatedAtMs === lastLocalConfigWriteRef.current
           ) {
             return;
           }
-          applyRemoteSchoolConfig(snap.data());
+          if (Date.now() - lastLocalConfigWriteRef.current < 600) {
+            return;
+          }
+          applyRemoteSchoolConfig(data);
         } else if (!isFirestoreQuotaExhausted()) {
           refreshGlobalDatabaseCache();
           syncSchoolConfigToFirestore(
@@ -1232,7 +1425,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const unsubscribeAllUsers = onSnapshot(
       usersColRef,
       (snap) => {
-        if (!snap.empty) {
+        if (globalConfigReady && !snap.empty) {
           reconcileUsersCollectionDocs(snap.docs, false);
         }
       },
@@ -1241,9 +1434,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     );
 
+    const pullLatestFromServerIfChanged = async () => {
+      if (Date.now() - lastLocalConfigWriteRef.current < 1200) return;
+      try {
+        const snap = await getDocFromServer(globalConfigRef);
+        if (snap.exists()) {
+          markDocKnownInFirestore('school_configs', GLOBAL_SCHOOL_CONFIG_DOC_ID);
+          const data = snap.data();
+          const parsedExt = parseExtendedSchoolConfig(data);
+          if (
+            parsedExt.updatedAtMs > 0 &&
+            parsedExt.updatedAtMs !== lastLocalConfigWriteRef.current &&
+            parsedExt.updatedAtMs >= lastAppliedRemoteUpdateRef.current
+          ) {
+            applyRemoteSchoolConfig(data);
+          }
+        }
+      } catch {
+        // Ignore if offline
+      }
+    };
+
+    const handleVisibilityOrFocus = () => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        pullLatestFromServerIfChanged();
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    const pollInterval = setInterval(pullLatestFromServerIfChanged, 10000);
+
     return () => {
       unsubscribeGlobal();
       unsubscribeAllUsers();
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      clearInterval(pollInterval);
     };
   }, []);
 
@@ -1362,12 +1589,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (fbUser) {
         const email = (fbUser.email || 'pendidik@baiturrahman.sch.id').toLowerCase().trim();
         const isBootstrappedAdmin = fbUser.emailVerified && isAuthorizedSuperAdminEmail(email);
+        const rawPrefix = email
+          .split('@')[0]
+          .toLowerCase()
+          .replace(/[^a-z0-9_]/g, '')
+          .slice(0, 20);
+        const deletedSet = new Set(
+          deletedUsernamesRef.current.map((u) => String(u || '').toLowerCase().trim())
+        );
+
+        // If this Google account was deleted by Super Admin, do not auto-login or restore old profile
+        if (
+          !isBootstrappedAdmin &&
+          (deletedSet.has(email) || (rawPrefix && deletedSet.has(rawPrefix)))
+        ) {
+          currentUserRef.current = null;
+          setCurrentUser(null);
+          localStorage.removeItem('bw_user');
+          localStorage.setItem('bw_explicit_logout', '1');
+          signOut(auth).catch(() => {});
+          return;
+        }
+
+        if (localStorage.getItem('bw_explicit_logout') === '1') {
+          return;
+        }
 
         if (isBootstrappedAdmin) {
           localStorage.setItem(SUPERADMIN_VERIFIED_TOKEN_KEY, SUPERADMIN_VERIFIED_TOKEN_VALUE);
         }
 
-        // Always build & register the Google user account in the global users list so it appears in Superadmin
+        // Build & register the Google user account in the global users list so it appears in Superadmin
         const googleUserRecord = buildGoogleUserRecord(
           fbUser,
           usersRef.current,
@@ -1391,8 +1643,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
             return prev;
           }
-          if (localStorage.getItem('bw_explicit_logout') === '1') return null;
-
           if (isBootstrappedAdmin) {
             return SUPERADMIN_USER;
           }
@@ -1844,20 +2094,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const email = (fbUser.email || 'pendidik@baiturrahman.sch.id').toLowerCase().trim();
       const isBootstrappedAdmin = fbUser.emailVerified && isAuthorizedSuperAdminEmail(email);
 
-      // Pull latest global_config accounts first so we merge cleanly with all existing database users
+      // Pull latest global_config accounts, workspace (grades, tahfidz, reportCards) & deletedUsernames first
       try {
         const globalSnap = await getDocFromServer(
           doc(db, 'school_configs', GLOBAL_SCHOOL_CONFIG_DOC_ID)
         );
         if (globalSnap.exists()) {
-          const parsedExt = parseExtendedSchoolConfig(globalSnap.data());
-          if (Array.isArray(parsedExt.users) && parsedExt.users.length > 0) {
-            usersRef.current = mergeUserLists(
-              [INITIAL_USERS, usersRef.current, parsedExt.users],
-              deletedUsernamesRef.current
-            );
-          }
+          markDocKnownInFirestore('school_configs', GLOBAL_SCHOOL_CONFIG_DOC_ID);
+          applyRemoteSchoolConfig(globalSnap.data());
         }
+        hasHydratedGlobalConfigRef.current = true;
       } catch {
         // Ignore if offline
       }
@@ -1867,16 +2113,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         !isFromLoginScreen && isSuperAdminUser(currentUserRef.current) && isBootstrappedAdmin;
       const grantSuperAdmin = isBootstrappedAdmin || keepExistingSuperAdmin;
 
-      // Always create/update a dedicated Google account record so EVERY Google account is visible in Superadmin
+      const rawPrefix = email
+        .split('@')[0]
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, '')
+        .slice(0, 20);
+      const deletedSet = new Set(
+        deletedUsernamesRef.current.map((u) => String(u || '').toLowerCase().trim())
+      );
+      const wasPreviouslyDeleted =
+        !grantSuperAdmin &&
+        (deletedSet.has(email) || (rawPrefix && deletedSet.has(rawPrefix)));
+
+      // If this Google account was previously deleted by Super Admin, reset its profile completely by passing [] as existingUsers
       const googleUserRecord = buildGoogleUserRecord(
         fbUser,
-        usersRef.current,
+        wasPreviouslyDeleted ? [] : usersRef.current,
         grantSuperAdmin ? 'admin' : 'guru'
       );
 
-      // Ensure this Google username is not in deletedUsernames since the user actively signed in with Google
+      const cleanGoogleUsername = googleUserRecord.username.toLowerCase().trim();
+      if (wasPreviouslyDeleted) {
+        // Wipe any old password associated with the reset account
+        if (cleanGoogleUsername in userPasswordsRef.current) {
+          const nextPass = { ...userPasswordsRef.current };
+          delete nextPass[cleanGoogleUsername];
+          userPasswordsRef.current = nextPass;
+          setUserPasswords(nextPass);
+          localStorage.setItem('bw_user_passwords', JSON.stringify(nextPass));
+        }
+      }
+
+      // Ensure this Google username & email are removed from deletedUsernames since a fresh profile is now created
       const nextDeleted = deletedUsernamesRef.current.filter(
-        (u) => u !== googleUserRecord.username.toLowerCase().trim()
+        (u) => u !== cleanGoogleUsername && u !== email
       );
       if (nextDeleted.length !== deletedUsernamesRef.current.length) {
         deletedUsernamesRef.current = nextDeleted;
@@ -1901,8 +2171,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         targetUser = googleUserRecord;
       }
 
+      const baseUsersForMerge = wasPreviouslyDeleted
+        ? usersRef.current.filter(
+            (u) =>
+              u.username.toLowerCase().trim() !== cleanGoogleUsername &&
+              u.email?.toLowerCase().trim() !== email
+          )
+        : usersRef.current;
+      const baseInitialForMerge = wasPreviouslyDeleted
+        ? INITIAL_USERS.filter(
+            (u) =>
+              u.username.toLowerCase().trim() !== cleanGoogleUsername &&
+              u.email?.toLowerCase().trim() !== email
+          )
+        : INITIAL_USERS;
+
       const nextUsers = mergeUserLists(
-        [INITIAL_USERS, usersRef.current, [googleUserRecord, targetUser]],
+        [baseInitialForMerge, baseUsersForMerge, [googleUserRecord, targetUser]],
         nextDeleted
       );
       usersRef.current = nextUsers;
@@ -1968,6 +2253,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           getDocs(collection(db, 'users')).catch(() => null),
         ]);
         if (globalSnap && globalSnap.exists()) {
+          markDocKnownInFirestore('school_configs', GLOBAL_SCHOOL_CONFIG_DOC_ID);
           const parsedExt = parseExtendedSchoolConfig(globalSnap.data());
           if (Array.isArray(parsedExt.users)) {
             remoteConfigUsers.push(...parsedExt.users);
@@ -2108,7 +2394,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    // 2. Educator / Staff Login Gate (Must exist in database users list)
+    // 2. Educator / Staff Login Gate (Must exist in database users list & NOT be deleted)
+    const deletedSet = new Set(
+      deletedUsernamesRef.current.map((u) => String(u || '').toLowerCase().trim())
+    );
+    if (deletedSet.has(cleanUsername)) {
+      return {
+        success: false,
+        message: `Akun "${cleanUsername}" telah dihapus oleh Super Admin dan tidak dapat digunakan untuk login. Silakan daftar akun baru.`,
+      };
+    }
+
     const allKnownUsers = mergeUserLists(
       [usersRef.current, INITIAL_USERS],
       deletedUsernamesRef.current
@@ -2123,11 +2419,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!foundUser) {
       return {
         success: false,
-        message: `Akun "${cleanUsername}" tidak ditemukan di database. Silakan daftar akun baru atau masuk dengan Google.`,
+        message: `Akun "${cleanUsername}" tidak ditemukan atau telah dihapus. Silakan daftar akun baru.`,
       };
     }
 
     const targetUsername = foundUser.username.toLowerCase().trim();
+    const targetEmail = (foundUser.email || '').toLowerCase().trim();
+    if (deletedSet.has(targetUsername) || (targetEmail && deletedSet.has(targetEmail))) {
+      return {
+        success: false,
+        message: `Akun "${cleanUsername}" telah dihapus oleh Super Admin dan tidak dapat digunakan untuk login.`,
+      };
+    }
+
     const storedPassword = userPasswordsRef.current[targetUsername] || foundUser.password;
     if (storedPassword && cleanPassword !== storedPassword) {
       return {
@@ -2167,7 +2471,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return false;
     }
 
-    const existing = usersRef.current.find(
+    const activeUsers = mergeUserLists(
+      [usersRef.current, INITIAL_USERS],
+      deletedUsernamesRef.current
+    );
+    const existing = activeUsers.find(
       (u) => u.username.toLowerCase().trim() === cleanUsername
     );
     if (existing) {
@@ -2175,8 +2483,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return false;
     }
 
-    // Remove from deletedUsernames if previously deleted
-    const nextDeleted = deletedUsernamesRef.current.filter((u) => u !== cleanUsername);
+    const cleanDefaultEmail = `${cleanUsername}@baiturrahman.sch.id`;
+
+    // Remove from deletedUsernames if previously deleted so new registration starts with a 100% reset profile
+    const nextDeleted = deletedUsernamesRef.current.filter(
+      (u) => u !== cleanUsername && u !== cleanDefaultEmail
+    );
     if (nextDeleted.length !== deletedUsernamesRef.current.length) {
       deletedUsernamesRef.current = nextDeleted;
       setDeletedUsernames(nextDeleted);
@@ -2195,7 +2507,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: normalizeUserId(`usr-${cleanUsername}`, cleanUsername),
       username: cleanUsername,
       fullName: cleanFullName,
-      email: `${cleanUsername}@baiturrahman.sch.id`,
+      email: cleanDefaultEmail,
       avatarUrl: '/src/assets/images/avatar_muhammad_siroj_1791464103883.jpg',
       role: 'guru',
       joinedDate: new Date().toLocaleDateString('id-ID'),
@@ -2203,8 +2515,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       authProvider: 'local',
     });
 
+    // Exclude any old record for cleanUsername from INITIAL_USERS or usersRef.current so previous profile is completely reset
+    const filteredInitial = INITIAL_USERS.filter(
+      (u) => u.username.toLowerCase().trim() !== cleanUsername
+    );
+    const filteredCurrent = usersRef.current.filter(
+      (u) => u.username.toLowerCase().trim() !== cleanUsername
+    );
+
     const nextUsers = mergeUserLists(
-      [INITIAL_USERS, usersRef.current, [newUser]],
+      [filteredInitial, filteredCurrent, [newUser]],
       nextDeleted
     );
     usersRef.current = nextUsers;
@@ -2496,19 +2816,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const cleanU = targetUser.username.toLowerCase().trim();
-    const nextDeleted = Array.from(new Set([...deletedUsernamesRef.current, cleanU])).filter(
-      (u) => u && u !== 'superadmin'
-    );
+    const cleanEmail = (targetUser.email || '').toLowerCase().trim();
+    const entriesToBlock = [
+      cleanU,
+      ...(cleanEmail && !isAuthorizedSuperAdminEmail(cleanEmail) ? [cleanEmail] : []),
+    ];
+    const nextDeleted = Array.from(
+      new Set([...deletedUsernamesRef.current, ...entriesToBlock])
+    ).filter((u) => u && u !== 'superadmin');
     deletedUsernamesRef.current = nextDeleted;
     setDeletedUsernames(nextDeleted);
     localStorage.setItem('bw_deleted_usernames', JSON.stringify(nextDeleted));
 
+    // Wipe any saved password for the deleted user so previous credentials are completely reset
+    if (cleanU in userPasswordsRef.current) {
+      const nextPasswords = { ...userPasswordsRef.current };
+      delete nextPasswords[cleanU];
+      userPasswordsRef.current = nextPasswords;
+      setUserPasswords(nextPasswords);
+      localStorage.setItem('bw_user_passwords', JSON.stringify(nextPasswords));
+    }
+
     const nextUsers = usersRef.current.filter(
-      (u) => u.id !== id && u.username.toLowerCase().trim() !== cleanU
+      (u) =>
+        u.id !== id &&
+        u.username.toLowerCase().trim() !== cleanU &&
+        (!cleanEmail || u.email?.toLowerCase().trim() !== cleanEmail)
     );
     usersRef.current = nextUsers;
     setUsers(nextUsers);
     localStorage.setItem('bw_users_list', JSON.stringify(nextUsers));
+
+    if (
+      currentUserRef.current &&
+      (currentUserRef.current.id === id ||
+        currentUserRef.current.username.toLowerCase().trim() === cleanU)
+    ) {
+      currentUserRef.current = null;
+      setCurrentUser(null);
+      localStorage.removeItem('bw_user');
+    }
 
     const uid = auth.currentUser?.uid || targetUser.googleUid || 'global_registry';
     const candidateDocIds = Array.from(
@@ -2519,17 +2866,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           targetUser.googleUid
             ? getUserProfileDocId(targetUser.googleUid, id, targetUser.username)
             : '',
-          ...getKnownDocIdsInCollection('users').filter((docId) =>
-            docId.toLowerCase().endsWith(`_${cleanU}`)
-          ),
+          ...getKnownDocIdsInCollection('users').filter((docId) => {
+            const lower = docId.toLowerCase();
+            return lower === `usr-${cleanU}` || lower.endsWith(`_${cleanU}`);
+          }),
         ].filter(Boolean)
       )
     );
     candidateDocIds.forEach((docId) => {
       deleteFirestoreDoc('users', docId).catch(() => {});
     });
+
+    // Also query /users collection to purge any legacy documents matching this username or email
+    getDocs(collection(db, 'users'))
+      .then((snap) => {
+        snap.docs.forEach((docSnap) => {
+          const d = docSnap.data();
+          const docU = String(d.username || '').toLowerCase().trim();
+          const docE = String(d.email || '').toLowerCase().trim();
+          if (
+            docU === cleanU ||
+            (cleanEmail && docE === cleanEmail) ||
+            docSnap.id.toLowerCase().endsWith(`_${cleanU}`)
+          ) {
+            deleteFirestoreDoc('users', docSnap.id).catch(() => {});
+          }
+        });
+      })
+      .catch(() => {});
+
     syncAccountsToDatabase(nextUsers, undefined, nextDeleted);
-    showToast(`Akun @${targetUser.username} berhasil dihapus dari database.`, 'info');
+    showToast(
+      `Akun @${targetUser.username} berhasil dihapus & profil sebelumnya telah direset.`,
+      'info'
+    );
   };
 
   const resetUserPassword = (id: string, newPass: string) => {
@@ -2725,7 +3095,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (r) =>
         r.id === record.id ||
         (r.studentId === record.studentId &&
-          r.classId === record.classId &&
           r.semester === record.semester &&
           r.academicYear === record.academicYear)
     );
@@ -2738,7 +3107,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     reportCardsRef.current = nextList;
     setReportCards(nextList);
     localStorage.setItem('bw_report_cards', JSON.stringify(nextList));
-    scheduleSchoolConfigSync();
+    scheduleSchoolConfigSync(true);
 
     const uid = auth.currentUser?.uid;
     if (uid) {
@@ -2759,7 +3128,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     reportCardsRef.current = nextList;
     setReportCards(nextList);
     localStorage.setItem('bw_report_cards', JSON.stringify(nextList));
-    scheduleSchoolConfigSync();
+    scheduleSchoolConfigSync(true);
     const uid = auth.currentUser?.uid;
     if (uid) {
       deleteFirestoreDoc('report_cards', getReportCardDocId(uid, id)).then(() => markSynced());
@@ -2768,8 +3137,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const generateClassReportCards = (classId: number, semester: 1 | 2): number => {
-    const classObj = classesRef.current.find((c) => c.id === classId);
-    const classStudentList = studentsRef.current.filter((s) => s.classId === classId);
+    const isAllClasses = !classId || classId <= 0 || isNaN(classId);
+    const classStudentList = isAllClasses
+      ? studentsRef.current
+      : studentsRef.current.filter((s) => s.classId === classId);
     if (!classStudentList.length) {
       showToast('Tidak ada siswa di kelas yang dipilih.', 'error');
       return 0;
@@ -2780,6 +3151,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newReports = [...reportCardsRef.current];
 
     classStudentList.forEach((st) => {
+      const stClassObj = classesRef.current.find((c) => c.id === st.classId);
       const repId = `${st.id}_${semester}_${academicYearRef.current}`;
       const existingIdx = newReports.findIndex((r) => r.id === repId);
 
@@ -2790,7 +3162,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const defaultReport: ReportCardRecord = {
         id: repId,
         studentId: st.id,
-        classId: classId,
+        classId: st.classId,
         semester: semester,
         academicYear: academicYearRef.current,
         status: 'ready',
@@ -2806,13 +3178,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         issueDate: todayDate,
         headmasterName: siteSettingsRef.current.headmasterName || 'Muhammad Siroj, S.Pd.I',
         headmasterNip: siteSettingsRef.current.headmasterNip || '19830715 200801 1 004',
-        classTeacherName: classObj?.teacher || 'Wali Kelas',
+        classTeacherName: stClassObj?.teacher || 'Wali Kelas',
         updatedAt: new Date().toISOString(),
       };
 
       if (existingIdx >= 0) {
         const updatedExisting: ReportCardRecord = {
           ...newReports[existingIdx],
+          classId: st.classId,
+          tahfidzNotes: studentTahfidz?.notes || newReports[existingIdx].tahfidzNotes || 'Juz 30',
           status: newReports[existingIdx].status === 'published' ? 'published' : 'ready',
           updatedAt: new Date().toISOString(),
         };
@@ -2827,7 +3201,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     reportCardsRef.current = newReports;
     setReportCards(newReports);
     localStorage.setItem('bw_report_cards', JSON.stringify(newReports));
-    scheduleSchoolConfigSync();
+    scheduleSchoolConfigSync(true);
 
     const uid = auth.currentUser?.uid;
     if (uid && recordsToSync.length > 0) {
@@ -2839,7 +3213,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ).then(() => markSynced());
     }
 
-    showToast(`Rapor untuk ${classStudentList.length} santri kelas siap diterbitkan & disinkronkan!`, 'success');
+    showToast(
+      `Rapor untuk ${classStudentList.length} santri ${isAllClasses ? 'semua kelas' : 'kelas'} siap diterbitkan & disinkronkan!`,
+      'success'
+    );
     return classStudentList.length;
   };
 
@@ -3412,20 +3789,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nextList = [...gradesRef.current];
     let nextId = Math.max(0, ...nextList.map((g) => g.id)) + 1;
 
-    Object.entries(gradesData).forEach(([studentIdStr, score]) => {
+    Object.entries(gradesData).forEach(([studentIdStr, rawScore]) => {
       const studentId = parseInt(studentIdStr, 10);
-      if (!isNaN(score) && score >= 0) {
+      if (!isNaN(rawScore) && rawScore >= 0) {
+        const score = clampScore90(rawScore);
+        const stObj = studentsRef.current.find((s) => s.id === studentId);
+        const effectiveClassId = stObj?.classId || classId;
+
         const existingIdx = nextList.findIndex(
           (g) =>
             g.studentId === studentId &&
             g.subjectId === subjectId &&
-            g.classId === classId &&
             g.semester === semester
         );
 
         if (existingIdx >= 0) {
           const updated: Grade = {
             ...nextList[existingIdx],
+            classId: effectiveClassId,
             score,
             testDate,
           };
@@ -3436,7 +3817,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             id: nextId++,
             studentId,
             subjectId,
-            classId,
+            classId: effectiveClassId,
             semester,
             score,
             testDate,
@@ -3448,10 +3829,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
-    gradesRef.current = nextList;
-    setGrades(nextList);
-    localStorage.setItem('bw_grades', JSON.stringify(nextList));
-    scheduleSchoolConfigSync();
+    const dedupedList = normalizeGradesList(nextList);
+    gradesRef.current = dedupedList;
+    setGrades(dedupedList);
+    localStorage.setItem('bw_grades', JSON.stringify(dedupedList));
+    scheduleSchoolConfigSync(true);
 
     const uid = auth.currentUser?.uid;
     if (uid && gradesToSync.length > 0) {
@@ -3469,7 +3851,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (!options?.silent) {
       showToast(
-        `Berhasil menyimpan nilai untuk ${Object.keys(gradesData).length} santri ke database!`
+        `Berhasil menyimpan nilai untuk ${Object.keys(gradesData).length} santri ke database & rapor!`
       );
     }
   };
@@ -3484,6 +3866,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const testDate = new Date().toISOString().split('T')[0];
     const gradesToUpsert: Grade[] = [];
     const gradeIdsToDelete: number[] = [];
+
+    const stObj = studentsRef.current.find((s) => s.id === studentId);
+    const effectiveClassId = stObj?.classId || classId;
 
     let nextList = [...gradesRef.current];
     let nextId = Math.max(0, ...nextList.map((g) => g.id)) + 1;
@@ -3507,11 +3892,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
+      const clampedScore = clampScore90(scoreOrNull);
+
       if (existingIdx >= 0) {
-        if (nextList[existingIdx].score !== scoreOrNull) {
+        if (
+          nextList[existingIdx].score !== clampedScore ||
+          nextList[existingIdx].classId !== effectiveClassId
+        ) {
           const updated: Grade = {
             ...nextList[existingIdx],
-            score: scoreOrNull,
+            classId: effectiveClassId,
+            score: clampedScore,
             testDate,
           };
           nextList[existingIdx] = updated;
@@ -3522,9 +3913,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           id: nextId++,
           studentId,
           subjectId,
-          classId,
+          classId: effectiveClassId,
           semester,
-          score: scoreOrNull,
+          score: clampedScore,
           testDate,
           type: 'regular',
         };
@@ -3533,10 +3924,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
-    gradesRef.current = nextList;
-    setGrades(nextList);
-    localStorage.setItem('bw_grades', JSON.stringify(nextList));
-    scheduleSchoolConfigSync();
+    const dedupedList = normalizeGradesList(nextList);
+    gradesRef.current = dedupedList;
+    setGrades(dedupedList);
+    localStorage.setItem('bw_grades', JSON.stringify(dedupedList));
+    scheduleSchoolConfigSync(true);
 
     const uid = auth.currentUser?.uid;
     if (uid && (gradesToUpsert.length > 0 || gradeIdsToDelete.length > 0)) {
@@ -3554,17 +3946,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     if (!options?.silent) {
-      showToast('Nilai mata pelajaran agama & umum berhasil disimpan ke database!');
+      showToast('Nilai mata pelajaran agama & umum berhasil disimpan ke database & rapor!');
     }
   };
 
-  const updateGrade = (id: number, score: number, options?: { silent?: boolean }) => {
+  const updateGrade = (id: number, rawScore: number, options?: { silent?: boolean }) => {
+    const score = clampScore90(rawScore);
     const existing = gradesRef.current.find((g) => g.id === id);
-    const nextList = gradesRef.current.map((g) => (g.id === id ? { ...g, score } : g));
+    const nextList = normalizeGradesList(
+      gradesRef.current.map((g) => (g.id === id ? { ...g, score } : g))
+    );
     gradesRef.current = nextList;
     setGrades(nextList);
     localStorage.setItem('bw_grades', JSON.stringify(nextList));
-    scheduleSchoolConfigSync();
+    scheduleSchoolConfigSync(true);
 
     const uid = auth.currentUser?.uid;
     if (uid && existing) {
@@ -3577,7 +3972,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
     if (!options?.silent) {
-      showToast('Nilai berhasil diperbarui ke database.');
+      showToast('Nilai berhasil diperbarui ke database & rapor.');
     }
   };
 
@@ -3586,7 +3981,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     gradesRef.current = nextList;
     setGrades(nextList);
     localStorage.setItem('bw_grades', JSON.stringify(nextList));
-    scheduleSchoolConfigSync();
+    scheduleSchoolConfigSync(true);
 
     const uid = auth.currentUser?.uid;
     if (uid) {
@@ -3602,11 +3997,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // =========================================================
 
   const calculateLetter = (avg: number): TahfidzGrade['gradeLetter'] => {
-    if (avg >= 86) return 'A';
-    if (avg >= 81) return 'B';
-    if (avg >= 71) return 'C';
-    if (avg >= 60) return 'D';
-    return 'E';
+    return evaluateGradePredicate(avg, siteSettingsRef.current.gradeThresholds).letter;
   };
 
   const saveBulkTahfidz = (
@@ -3619,21 +4010,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const recordsToSync: TahfidzGrade[] = [];
     const nextList = [...tahfidzGradesRef.current];
     let nextId = Math.max(0, ...nextList.map((t) => t.id)) + 1;
+    let reportsModified = false;
+    const nextReports = [...reportCardsRef.current];
 
     records.forEach((r) => {
-      const total = Math.round((r.tahfidzScore + r.tajweedScore) / 2);
+      const tfzScore = clampScore90(r.tahfidzScore);
+      const tjwScore = clampScore90(r.tajweedScore);
+      const total = clampScore90(Math.round((tfzScore + tjwScore) / 2));
+      const stObj = studentsRef.current.find((s) => s.id === r.studentId);
+      const effectiveClassId = stObj?.classId || classId;
+
       const existingIdx = nextList.findIndex(
-        (t) =>
-          t.studentId === r.studentId &&
-          t.classId === classId &&
-          t.semester === semester
+        (t) => t.studentId === r.studentId && t.semester === semester
       );
 
       if (existingIdx >= 0) {
         const updated: TahfidzGrade = {
           ...nextList[existingIdx],
-          tahfidzScore: r.tahfidzScore,
-          tajweedScore: r.tajweedScore,
+          classId: effectiveClassId,
+          tahfidzScore: tfzScore,
+          tajweedScore: tjwScore,
           totalScore: total,
           gradeLetter: calculateLetter(total),
           notes: r.notes || '',
@@ -3645,10 +4041,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const created: TahfidzGrade = {
           id: nextId++,
           studentId: r.studentId,
-          classId,
+          classId: effectiveClassId,
           semester,
-          tahfidzScore: r.tahfidzScore,
-          tajweedScore: r.tajweedScore,
+          tahfidzScore: tfzScore,
+          tajweedScore: tjwScore,
           totalScore: total,
           gradeLetter: calculateLetter(total),
           notes: r.notes || '',
@@ -3657,12 +4053,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         nextList.push(created);
         recordsToSync.push(created);
       }
+
+      // Keep ReportCardRecord tahfidzNotes synchronized if a report card already exists
+      if (r.notes && r.notes.trim()) {
+        const repId = `${r.studentId}_${semester}_${academicYearRef.current}`;
+        const repIdx = nextReports.findIndex(
+          (rep) =>
+            rep.id === repId ||
+            (rep.studentId === r.studentId && rep.semester === semester)
+        );
+        if (repIdx >= 0 && nextReports[repIdx].tahfidzNotes !== r.notes.trim()) {
+          nextReports[repIdx] = {
+            ...nextReports[repIdx],
+            tahfidzNotes: r.notes.trim(),
+            updatedAt: new Date().toISOString(),
+          };
+          reportsModified = true;
+        }
+      }
     });
 
-    tahfidzGradesRef.current = nextList;
-    setTahfidzGrades(nextList);
-    localStorage.setItem('bw_tahfidz', JSON.stringify(nextList));
-    scheduleSchoolConfigSync();
+    const dedupedList = normalizeTahfidzList(nextList);
+    tahfidzGradesRef.current = dedupedList;
+    setTahfidzGrades(dedupedList);
+    localStorage.setItem('bw_tahfidz', JSON.stringify(dedupedList));
+
+    if (reportsModified) {
+      reportCardsRef.current = nextReports;
+      setReportCards(nextReports);
+      localStorage.setItem('bw_report_cards', JSON.stringify(nextReports));
+    }
+
+    scheduleSchoolConfigSync(true);
 
     const uid = auth.currentUser?.uid;
     if (uid && recordsToSync.length > 0) {
@@ -3675,7 +4097,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     if (!options?.silent) {
-      showToast(`Berhasil menyimpan ${records.length} data hafalan tahfidz ke database!`);
+      showToast(`Berhasil menyimpan ${records.length} data hafalan tahfidz ke database & rapor!`);
     }
   };
 
@@ -3685,27 +4107,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     options?: { silent?: boolean }
   ) => {
     const existing = tahfidzGradesRef.current.find((t) => t.id === id);
-    const total = Math.round((data.tahfidzScore + data.tajweedScore) / 2);
+    const tfzScore = clampScore90(data.tahfidzScore);
+    const tjwScore = clampScore90(data.tajweedScore);
+    const total = clampScore90(Math.round((tfzScore + tjwScore) / 2));
     const letter = calculateLetter(total);
 
-    const nextList = tahfidzGradesRef.current.map((t) =>
-      t.id === id
-        ? {
-            ...t,
-            tahfidzScore: data.tahfidzScore,
-            tajweedScore: data.tajweedScore,
-            notes: data.notes,
-            testDate: data.testDate,
-            totalScore: total,
-            gradeLetter: letter,
-          }
-        : t
+    const nextList = normalizeTahfidzList(
+      tahfidzGradesRef.current.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              tahfidzScore: tfzScore,
+              tajweedScore: tjwScore,
+              notes: data.notes,
+              testDate: data.testDate,
+              totalScore: total,
+              gradeLetter: letter,
+            }
+          : t
+      )
     );
 
     tahfidzGradesRef.current = nextList;
     setTahfidzGrades(nextList);
     localStorage.setItem('bw_tahfidz', JSON.stringify(nextList));
-    scheduleSchoolConfigSync();
+
+    if (existing && data.notes && data.notes.trim()) {
+      const repId = `${existing.studentId}_${existing.semester}_${academicYearRef.current}`;
+      const repIdx = reportCardsRef.current.findIndex(
+        (rep) =>
+          rep.id === repId ||
+          (rep.studentId === existing.studentId && rep.semester === existing.semester)
+      );
+      if (repIdx >= 0) {
+        const nextReports = [...reportCardsRef.current];
+        nextReports[repIdx] = {
+          ...nextReports[repIdx],
+          tahfidzNotes: data.notes.trim(),
+          updatedAt: new Date().toISOString(),
+        };
+        reportCardsRef.current = nextReports;
+        setReportCards(nextReports);
+        localStorage.setItem('bw_report_cards', JSON.stringify(nextReports));
+      }
+    }
+
+    scheduleSchoolConfigSync(true);
 
     const uid = auth.currentUser?.uid;
     if (uid && existing) {
@@ -3715,8 +4162,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }).then(() => {
         syncTahfidzToFirestore(uid, {
           ...existing,
-          tahfidzScore: data.tahfidzScore,
-          tajweedScore: data.tajweedScore,
+          tahfidzScore: tfzScore,
+          tajweedScore: tjwScore,
           notes: data.notes,
           testDate: data.testDate,
           totalScore: total,
@@ -3725,7 +4172,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
     if (!options?.silent) {
-      showToast('Nilai tahfidz berhasil diperbarui ke database.');
+      showToast('Nilai tahfidz berhasil diperbarui ke database & rapor.');
     }
   };
 
@@ -3734,7 +4181,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     tahfidzGradesRef.current = nextList;
     setTahfidzGrades(nextList);
     localStorage.setItem('bw_tahfidz', JSON.stringify(nextList));
-    scheduleSchoolConfigSync();
+    scheduleSchoolConfigSync(true);
     const uid = auth.currentUser?.uid;
     if (uid) {
       deleteFirestoreDoc('tahfidz_grades', getTahfidzDocId(uid, id)).then(() => markSynced());

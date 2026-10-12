@@ -276,7 +276,13 @@ export function normalizeUsersList(
     fallbackUsers.forEach((fb) => {
       if (!fb || typeof fb.username !== 'string') return;
       const key = fb.username.toLowerCase().trim();
-      if (!key || (key !== 'superadmin' && deletedSet.has(key))) return;
+      const emailKey = String(fb.email || '').toLowerCase().trim();
+      if (
+        !key ||
+        (key !== 'superadmin' && (deletedSet.has(key) || (emailKey && deletedSet.has(emailKey))))
+      ) {
+        return;
+      }
       byUsername.set(key, normalizeUserRecord(fb));
     });
   }
@@ -286,14 +292,15 @@ export function normalizeUsersList(
     users.forEach((u) => {
       if (!u || typeof u.username !== 'string') return;
       const key = u.username.toLowerCase().trim();
-      if (!key || (key !== 'superadmin' && deletedSet.has(key))) return;
+      const emailKey = String(u.email || '').toLowerCase().trim();
+      if (
+        !key ||
+        (key !== 'superadmin' && (deletedSet.has(key) || (emailKey && deletedSet.has(emailKey))))
+      ) {
+        return;
+      }
       const existing = byUsername.get(key);
-      const preferredAvatar =
-        u.avatarUrl && u.avatarUrl !== DEFAULT_AVATAR_URL
-          ? u.avatarUrl
-          : existing?.avatarUrl && existing.avatarUrl !== DEFAULT_AVATAR_URL
-          ? existing.avatarUrl
-          : u.avatarUrl || existing?.avatarUrl || DEFAULT_AVATAR_URL;
+      const preferredAvatar = u.avatarUrl || existing?.avatarUrl || DEFAULT_AVATAR_URL;
       const preferredAuthProvider =
         u.authProvider === 'google' || existing?.authProvider === 'google'
           ? 'google'
@@ -302,7 +309,7 @@ export function normalizeUsersList(
       const normalized = normalizeUserRecord({
         ...(existing || {}),
         ...u,
-        password: u.password || existing?.password,
+        password: u.password ?? existing?.password,
         email: u.email || existing?.email || '',
         avatarUrl: preferredAvatar,
         authProvider: preferredAuthProvider,
@@ -370,13 +377,18 @@ export function mergeUserLists(
   return normalizeUsersList(firstList, fallbackUsers, effectiveDeleted);
 }
 
-export function isCorruptedUserDocId(_uid: string, docId: string, _user?: User): boolean {
-  return /^usr_[a-zA-Z0-9]+_usr_/.test(docId);
+export function isCorruptedUserDocId(_uid: string, docId: string, user?: User): boolean {
+  if (/^usr_[a-zA-Z0-9]+_/.test(docId)) return true;
+  if (user) {
+    const canonical = getUserProfileDocId('', user.id, user.username);
+    if (docId !== canonical) return true;
+  }
+  return false;
 }
 
-export function getUserProfileDocId(uid: string, userId: string, username?: string): string {
+export function getUserProfileDocId(_uid: string, userId: string, username?: string): string {
   const cleanUserId = normalizeUserId(userId, username);
-  return sanitizeId(`usr_${uidPrefix(uid)}_${cleanUserId}`);
+  return sanitizeId(cleanUserId, 'usr');
 }
 
 export function getClassDocId(uid: string, classId: number): string {
@@ -819,6 +831,18 @@ export async function syncSchoolConfigToFirestore(
       defaultIssuePlace: siteSettings.defaultIssuePlace || 'Bandung',
       watermarkText: siteSettings.watermarkText || 'DOKUMEN RESMI',
       kkmDefault: siteSettings.kkmDefault ?? 70,
+      defaultSemester: siteSettings.defaultSemester === 2 ? 2 : 1,
+      gradeThresholds: siteSettings.gradeThresholds || {
+        minA: 86,
+        minB: 81,
+        minC: 71,
+        minD: 60,
+        labelA: 'Mumtaz (Istimewa)',
+        labelB: 'Jayyid Jiddan (Sangat Baik)',
+        labelC: 'Jayyid (Baik)',
+        labelD: 'Maqbul (Cukup)',
+        labelE: 'Rasib (Kurang)',
+      },
       footerText: siteSettings.footerText || '',
       reportCustomTitle: siteSettings.reportCustomTitle || normTheme.reportCustomTitle || '',
       announcements: Array.isArray(siteSettings.announcements) ? siteSettings.announcements : [],
@@ -830,8 +854,9 @@ export async function syncSchoolConfigToFirestore(
   };
 
   const serializeExtendedSafely = (): string => {
+    const MAX_EXTENDED_LEN = 750000;
     const rawJson = JSON.stringify(extendedPayload);
-    if (rawJson.length <= 490000) return rawJson;
+    if (rawJson.length <= MAX_EXTENDED_LEN) return rawJson;
 
     // Step 1: Compact oversized base64 user avatars & savedCustomFrames
     const step1 = {
@@ -843,7 +868,7 @@ export async function syncSchoolConfigToFirestore(
       },
     };
     const json1 = JSON.stringify(step1);
-    if (json1.length <= 490000) return json1;
+    if (json1.length <= MAX_EXTENDED_LEN) return json1;
 
     // Step 2: Trim customFrameConfig.customImageUrl if still oversized
     const step2 = {
@@ -856,9 +881,23 @@ export async function syncSchoolConfigToFirestore(
       },
     };
     const json2 = JSON.stringify(step2);
-    if (json2.length <= 490000) return json2;
+    if (json2.length <= MAX_EXTENDED_LEN) return json2;
 
-    // Step 3: Trim customRightLogoUrl & heavy workspace arrays while always keeping users + theme + site
+    // Step 3: Trim customRightLogoUrl & heavy examPackages while ALWAYS preserving grades, tahfidzGrades, reportCards, students, classes, subjects, and users
+    const essentialWorkspace: GlobalWorkspaceSnapshot | undefined = cachedGlobalWorkspace
+      ? {
+          classes: cachedGlobalWorkspace.classes,
+          subjects: cachedGlobalWorkspace.subjects,
+          students: cachedGlobalWorkspace.students,
+          grades: cachedGlobalWorkspace.grades,
+          tahfidzGrades: cachedGlobalWorkspace.tahfidzGrades,
+          reportCards: cachedGlobalWorkspace.reportCards,
+          studentAttendance: cachedGlobalWorkspace.studentAttendance,
+          teacherAttendance: cachedGlobalWorkspace.teacherAttendance,
+          teachingAssignments: cachedGlobalWorkspace.teachingAssignments,
+        }
+      : undefined;
+
     const step3 = {
       updatedAtMs: step2.updatedAtMs,
       site: step2.site,
@@ -868,9 +907,10 @@ export async function syncSchoolConfigToFirestore(
       },
       users: compactUsers,
       deletedUsernames,
+      ...(essentialWorkspace ? { workspace: essentialWorkspace } : {}),
     };
     const json3 = JSON.stringify(step3);
-    return json3.length <= 490000 ? json3 : '{}';
+    return json3.length <= MAX_EXTENDED_LEN ? json3 : '{}';
   };
 
   const mutableFields = {
@@ -1123,7 +1163,7 @@ export async function syncGradeToFirestore(uid: string, grade: Grade): Promise<v
     classId,
     classDocId: getClassDocId(uid, classId),
     semester: grade.semester === 2 ? 2 : 1,
-    score: clampNumber(grade.score, 0, 100, 0),
+    score: clampNumber(grade.score, 0, 90, 0),
     testDate: sanitizeString(grade.testDate, 30, new Date().toISOString().split('T')[0]),
     type: grade.type === 'exam' ? 'exam' : 'regular',
   };
@@ -1144,9 +1184,9 @@ export async function syncTahfidzToFirestore(uid: string, tfz: TahfidzGrade): Pr
   const gradeLetter = validLetters.includes(tfz.gradeLetter) ? tfz.gradeLetter : 'B';
 
   const mutableFields = {
-    tahfidzScore: clampNumber(tfz.tahfidzScore, 0, 100, 0),
-    tajweedScore: clampNumber(tfz.tajweedScore, 0, 100, 0),
-    totalScore: clampNumber(tfz.totalScore, 0, 100, 0),
+    tahfidzScore: clampNumber(tfz.tahfidzScore, 0, 90, 0),
+    tajweedScore: clampNumber(tfz.tajweedScore, 0, 90, 0),
+    totalScore: clampNumber(tfz.totalScore, 0, 90, 0),
     gradeLetter,
     notes: sanitizeString(tfz.notes, 500, ''),
     testDate: sanitizeString(tfz.testDate, 30, new Date().toISOString().split('T')[0]),

@@ -279,6 +279,18 @@ export interface AnnouncementItem {
   isPinned: boolean;
 }
 
+export interface GradeThresholds {
+  minA: number;
+  minB: number;
+  minC: number;
+  minD: number;
+  labelA?: string;
+  labelB?: string;
+  labelC?: string;
+  labelD?: string;
+  labelE?: string;
+}
+
 export interface SiteSettings {
   foundationName?: string;
   appName: string;
@@ -299,6 +311,8 @@ export interface SiteSettings {
   defaultIssuePlace?: string;
   watermarkText?: string;
   kkmDefault?: number;
+  defaultSemester?: 1 | 2;
+  gradeThresholds?: GradeThresholds;
   footerText?: string;
   customLogoUrl?: string;
   customRightLogoUrl?: string;

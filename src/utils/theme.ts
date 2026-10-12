@@ -1,4 +1,4 @@
-import { ThemeColor, ThemeSettings, ReportBorderStyle, CustomPdfFrameConfig } from '../types';
+import { ThemeColor, ThemeSettings, ReportBorderStyle, CustomPdfFrameConfig, GradeThresholds } from '../types';
 
 export interface ThemeClasses {
   // Brand colors
@@ -1015,3 +1015,105 @@ export function angkaTerbilang(score: number | string): string {
   }
   return baseWords;
 }
+
+export const DEFAULT_GRADE_THRESHOLDS: Required<GradeThresholds> = {
+  minA: 86,
+  minB: 81,
+  minC: 71,
+  minD: 60,
+  labelA: 'Mumtaz (Istimewa)',
+  labelB: 'Jayyid Jiddan (Sangat Baik)',
+  labelC: 'Jayyid (Baik)',
+  labelD: 'Maqbul (Cukup)',
+  labelE: 'Rasib (Kurang)',
+};
+
+export function resolveGradeThresholds(
+  custom?: Partial<GradeThresholds> | null
+): Required<GradeThresholds> {
+  const minA =
+    typeof custom?.minA === 'number' && !isNaN(custom.minA)
+      ? custom.minA
+      : DEFAULT_GRADE_THRESHOLDS.minA;
+  const minB =
+    typeof custom?.minB === 'number' && !isNaN(custom.minB)
+      ? custom.minB
+      : DEFAULT_GRADE_THRESHOLDS.minB;
+  const minC =
+    typeof custom?.minC === 'number' && !isNaN(custom.minC)
+      ? custom.minC
+      : DEFAULT_GRADE_THRESHOLDS.minC;
+  const minD =
+    typeof custom?.minD === 'number' && !isNaN(custom.minD)
+      ? custom.minD
+      : DEFAULT_GRADE_THRESHOLDS.minD;
+
+  return {
+    minA,
+    minB,
+    minC,
+    minD,
+    labelA: custom?.labelA?.trim() || DEFAULT_GRADE_THRESHOLDS.labelA,
+    labelB: custom?.labelB?.trim() || DEFAULT_GRADE_THRESHOLDS.labelB,
+    labelC: custom?.labelC?.trim() || DEFAULT_GRADE_THRESHOLDS.labelC,
+    labelD: custom?.labelD?.trim() || DEFAULT_GRADE_THRESHOLDS.labelD,
+    labelE: custom?.labelE?.trim() || DEFAULT_GRADE_THRESHOLDS.labelE,
+  };
+}
+
+export function evaluateGradePredicate(
+  score: number,
+  thresholds?: Partial<GradeThresholds> | null
+): {
+  letter: 'A' | 'B' | 'C' | 'D' | 'E';
+  text: string;
+  shortText: string;
+  desc: string;
+  color: string;
+} {
+  const t = resolveGradeThresholds(thresholds);
+  if (score >= t.minA) {
+    return {
+      letter: 'A',
+      text: t.labelA,
+      shortText: t.labelA.replace(/\s*\([^)]*\)/g, '').trim() || 'Mumtaz',
+      desc: 'Sangat baik dalam menguasai seluruh kompetensi.',
+      color: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+    };
+  }
+  if (score >= t.minB) {
+    return {
+      letter: 'B',
+      text: t.labelB,
+      shortText: t.labelB.replace(/\s*\([^)]*\)/g, '').trim() || 'Jayyid Jiddan',
+      desc: 'Baik dalam menguasai kompetensi dasar.',
+      color: 'text-sky-700 bg-sky-50 border-sky-200',
+    };
+  }
+  if (score >= t.minC) {
+    return {
+      letter: 'C',
+      text: t.labelC,
+      shortText: t.labelC.replace(/\s*\([^)]*\)/g, '').trim() || 'Jayyid',
+      desc: 'Cukup dalam menguasai sebagian kompetensi.',
+      color: 'text-amber-700 bg-amber-50 border-amber-200',
+    };
+  }
+  if (score >= t.minD) {
+    return {
+      letter: 'D',
+      text: t.labelD,
+      shortText: t.labelD.replace(/\s*\([^)]*\)/g, '').trim() || 'Maqbul',
+      desc: 'Memerlukan bimbingan pada beberapa materi.',
+      color: 'text-orange-700 bg-orange-50 border-orange-200',
+    };
+  }
+  return {
+    letter: 'E',
+    text: t.labelE,
+    shortText: t.labelE.replace(/\s*\([^)]*\)/g, '').trim() || 'Rasib',
+    desc: 'Perlu pengulangan dan remedial intensif.',
+    color: 'text-rose-700 bg-rose-50 border-rose-200',
+  };
+}
+

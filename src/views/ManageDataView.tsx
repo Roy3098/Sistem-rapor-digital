@@ -11,6 +11,7 @@ import {
   ThemeDensity,
   ThemeBorderRadius,
   AnnouncementItem,
+  GradeThresholds,
 } from '../types';
 import {
   THEME_PALETTES,
@@ -18,6 +19,8 @@ import {
   applyThemeCssVariables,
   getReportThemeStyles,
   compressImageFileToDataUrl,
+  DEFAULT_GRADE_THRESHOLDS,
+  resolveGradeThresholds,
 } from '../utils/theme';
 import { OfficialKopSurat } from '../components/BrandLogoIcon';
 import { PdfSettingsModal, PdfSettingsTabId } from '../components/PdfSettingsModal';
@@ -354,6 +357,8 @@ export const ManageDataView: React.FC = () => {
     defaultIssuePlace: siteSettings.defaultIssuePlace || 'Bandung',
     watermarkText: siteSettings.watermarkText || 'DOKUMEN RESMI',
     kkmDefault: siteSettings.kkmDefault ?? 70,
+    defaultSemester: (siteSettings.defaultSemester === 2 ? 2 : 1) as 1 | 2,
+    gradeThresholds: resolveGradeThresholds(siteSettings.gradeThresholds),
     footerText: siteSettings.footerText || 'Evaluasi Akademik, Rapor Digital & Tahfidz',
     enableTahfidz: siteSettings.enableTahfidz !== false,
     enableBankSoal: siteSettings.enableBankSoal !== false,
@@ -378,6 +383,8 @@ export const ManageDataView: React.FC = () => {
       defaultIssuePlace: siteSettings.defaultIssuePlace || 'Bandung',
       watermarkText: siteSettings.watermarkText || 'DOKUMEN RESMI',
       kkmDefault: siteSettings.kkmDefault ?? 70,
+      defaultSemester: (siteSettings.defaultSemester === 2 ? 2 : 1) as 1 | 2,
+      gradeThresholds: resolveGradeThresholds(siteSettings.gradeThresholds),
       footerText: siteSettings.footerText || 'Evaluasi Akademik, Rapor Digital & Tahfidz',
       enableTahfidz: siteSettings.enableTahfidz !== false,
       enableBankSoal: siteSettings.enableBankSoal !== false,
@@ -397,6 +404,14 @@ export const ManageDataView: React.FC = () => {
       },
       { silent: true }
     );
+  };
+
+  const handleGradeThresholdChange = (patch: Partial<GradeThresholds>) => {
+    const nextThresholds = resolveGradeThresholds({
+      ...instForm.gradeThresholds,
+      ...patch,
+    });
+    handleInstFieldChange({ gradeThresholds: nextThresholds });
   };
 
   // Helper to update any theme setting and auto-sync immediately to all users
@@ -3436,9 +3451,9 @@ export const ManageDataView: React.FC = () => {
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Tahun Ajaran Aktif & KKM Standar
+                    Tahun Ajaran Aktif, Semester Default & KKM Standar
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <input
                       type="text"
                       value={instForm.academicYear}
@@ -3446,18 +3461,41 @@ export const ManageDataView: React.FC = () => {
                         handleInstFieldChange({ academicYear: e.target.value })
                       }
                       placeholder="2025/2026"
-                      className="w-full h-9 px-3 border border-slate-200 rounded-lg font-medium"
+                      title="Tahun Ajaran Aktif"
+                      className="w-full h-9 px-2.5 border border-slate-200 rounded-lg font-medium"
                     />
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={instForm.kkmDefault}
-                      onChange={(e) =>
-                        handleInstFieldChange({ kkmDefault: Number(e.target.value) || 70 })
-                      }
-                      className="w-full h-9 px-3 border border-slate-200 rounded-lg font-bold text-center"
-                    />
+                    <select
+                      value={instForm.defaultSemester}
+                      onChange={(e) => {
+                        const sem: 1 | 2 = Number(e.target.value) === 2 ? 2 : 1;
+                        handleInstFieldChange({ defaultSemester: sem });
+                        showToast(
+                          `Semester default aktif diatur ke Semester ${sem} (${sem === 1 ? 'Ganjil' : 'Genap'})`,
+                          'success'
+                        );
+                      }}
+                      title="Semester Default Aktif"
+                      className="w-full h-9 px-2 bg-white border border-slate-200 rounded-lg font-bold text-slate-800"
+                    >
+                      <option value={1}>Semester 1 (Ganjil)</option>
+                      <option value={2}>Semester 2 (Genap)</option>
+                    </select>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={instForm.kkmDefault}
+                        onChange={(e) =>
+                          handleInstFieldChange({ kkmDefault: Number(e.target.value) || 70 })
+                        }
+                        title="KKM Standar"
+                        className="w-full h-9 pl-2 pr-8 border border-slate-200 rounded-lg font-bold text-center"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-slate-400 pointer-events-none">
+                        KKM
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -3554,6 +3592,316 @@ export const ManageDataView: React.FC = () => {
                       />
                       <span className="font-semibold text-slate-700">Bank Soal</span>
                     </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pengaturan Semester Default & Skala Predikat Grade (A, B, C, D, E) */}
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/75 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-200/80">
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                      <Award className={`w-4 h-4 ${themeClasses.primaryText}`} />
+                      <span>Pengaturan Semester Default &amp; Konversi Grade Nilai (A, B, C, D)</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Atur semester aktif default dan batas nilai minimal untuk penentuan otomatis Grade A, B, C, D (serta E di bawah batas D) pada Halaman Nilai, Tahfidz, dan Rapor PDF.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleGradeThresholdChange({
+                          minA: 86,
+                          minB: 81,
+                          minC: 71,
+                          minD: 60,
+                        });
+                        showToast('Skala Grade diatur ke Standar Pesantren (86/81/71/60)', 'info');
+                      }}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
+                    >
+                      Standar Pesantren (86/81/71/60)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleGradeThresholdChange({
+                          minA: 90,
+                          minB: 80,
+                          minC: 70,
+                          minD: 60,
+                        });
+                        showToast('Skala Grade diatur ke Standar Nasional (90/80/70/60)', 'info');
+                      }}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
+                    >
+                      Standar Nasional (90/80/70/60)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleInstFieldChange({
+                          defaultSemester: 1,
+                          gradeThresholds: DEFAULT_GRADE_THRESHOLDS,
+                        });
+                        showToast('Pengaturan Grade & Semester di-reset ke default', 'info');
+                      }}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white border border-slate-200 text-rose-600 hover:bg-rose-50 cursor-pointer inline-flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Reset Default</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Default Semester Active Selector Banner */}
+                <div className="p-3 rounded-xl bg-white border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 block">
+                      Semester Default Aktif (Seluruh Halaman)
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Menentukan pilihan semester awal saat guru membuka Input Nilai, Tahfidz, Absensi, dan Rapor Digital.
+                    </span>
+                  </div>
+                  <div className="inline-flex rounded-xl p-1 bg-slate-100 border border-slate-200 shrink-0">
+                    {[
+                      { val: 1 as 1 | 2, label: 'Semester 1 (Ganjil)' },
+                      { val: 2 as 1 | 2, label: 'Semester 2 (Genap)' },
+                    ].map((semOpt) => {
+                      const isActive = instForm.defaultSemester === semOpt.val;
+                      return (
+                        <button
+                          key={semOpt.val}
+                          type="button"
+                          onClick={() => {
+                            handleInstFieldChange({ defaultSemester: semOpt.val });
+                            showToast(
+                              `Semester default diubah ke ${semOpt.label}`,
+                              'success'
+                            );
+                          }}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            isActive
+                              ? `${themeClasses.primary} text-white shadow-2xs`
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {semOpt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Grade A, B, C, D, E Configuration Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
+                  {/* GRADE A */}
+                  <div className="p-3 rounded-xl bg-white border border-emerald-200 shadow-2xs space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-black text-xs">
+                        GRADE A
+                      </span>
+                      <span className="text-[11px] font-bold text-emerald-700 tabular-nums">
+                        {instForm.gradeThresholds.minA} – 90
+                      </span>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                        Nilai Minimal Grade A (&ge;)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={90}
+                        value={instForm.gradeThresholds.minA}
+                        onChange={(e) =>
+                          handleGradeThresholdChange({
+                            minA: Math.max(0, Math.min(90, Number(e.target.value) || 0)),
+                          })
+                        }
+                        className="w-full h-8 px-2.5 bg-emerald-50/40 border border-emerald-200 rounded-lg font-extrabold text-center text-emerald-900 tabular-nums"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                        Label Predikat A
+                      </label>
+                      <input
+                        type="text"
+                        value={instForm.gradeThresholds.labelA}
+                        onChange={(e) =>
+                          handleGradeThresholdChange({ labelA: e.target.value })
+                        }
+                        placeholder="Mumtaz (Istimewa)"
+                        className="w-full h-8 px-2.5 bg-white border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  {/* GRADE B */}
+                  <div className="p-3 rounded-xl bg-white border border-sky-200 shadow-2xs space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 font-black text-xs">
+                        GRADE B
+                      </span>
+                      <span className="text-[11px] font-bold text-sky-700 tabular-nums">
+                        {instForm.gradeThresholds.minB} – {Math.max(instForm.gradeThresholds.minB, instForm.gradeThresholds.minA - 1)}
+                      </span>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                        Nilai Minimal Grade B (&ge;)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={89}
+                        value={instForm.gradeThresholds.minB}
+                        onChange={(e) =>
+                          handleGradeThresholdChange({
+                            minB: Math.max(0, Math.min(89, Number(e.target.value) || 0)),
+                          })
+                        }
+                        className="w-full h-8 px-2.5 bg-sky-50/40 border border-sky-200 rounded-lg font-extrabold text-center text-sky-900 tabular-nums"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                        Label Predikat B
+                      </label>
+                      <input
+                        type="text"
+                        value={instForm.gradeThresholds.labelB}
+                        onChange={(e) =>
+                          handleGradeThresholdChange({ labelB: e.target.value })
+                        }
+                        placeholder="Jayyid Jiddan (Sangat Baik)"
+                        className="w-full h-8 px-2.5 bg-white border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  {/* GRADE C */}
+                  <div className="p-3 rounded-xl bg-white border border-amber-200 shadow-2xs space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-black text-xs">
+                        GRADE C
+                      </span>
+                      <span className="text-[11px] font-bold text-amber-700 tabular-nums">
+                        {instForm.gradeThresholds.minC} – {Math.max(instForm.gradeThresholds.minC, instForm.gradeThresholds.minB - 1)}
+                      </span>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                        Nilai Minimal Grade C (&ge;)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={98}
+                        value={instForm.gradeThresholds.minC}
+                        onChange={(e) =>
+                          handleGradeThresholdChange({
+                            minC: Math.max(0, Math.min(98, Number(e.target.value) || 0)),
+                          })
+                        }
+                        className="w-full h-8 px-2.5 bg-amber-50/40 border border-amber-200 rounded-lg font-extrabold text-center text-amber-900 tabular-nums"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                        Label Predikat C
+                      </label>
+                      <input
+                        type="text"
+                        value={instForm.gradeThresholds.labelC}
+                        onChange={(e) =>
+                          handleGradeThresholdChange({ labelC: e.target.value })
+                        }
+                        placeholder="Jayyid (Baik)"
+                        className="w-full h-8 px-2.5 bg-white border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  {/* GRADE D */}
+                  <div className="p-3 rounded-xl bg-white border border-orange-200 shadow-2xs space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2 py-0.5 rounded-md bg-orange-100 text-orange-800 font-black text-xs">
+                        GRADE D
+                      </span>
+                      <span className="text-[11px] font-bold text-orange-700 tabular-nums">
+                        {instForm.gradeThresholds.minD} – {Math.max(instForm.gradeThresholds.minD, instForm.gradeThresholds.minC - 1)}
+                      </span>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                        Nilai Minimal Grade D (&ge;)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={97}
+                        value={instForm.gradeThresholds.minD}
+                        onChange={(e) =>
+                          handleGradeThresholdChange({
+                            minD: Math.max(0, Math.min(97, Number(e.target.value) || 0)),
+                          })
+                        }
+                        className="w-full h-8 px-2.5 bg-orange-50/40 border border-orange-200 rounded-lg font-extrabold text-center text-orange-900 tabular-nums"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                        Label Predikat D
+                      </label>
+                      <input
+                        type="text"
+                        value={instForm.gradeThresholds.labelD}
+                        onChange={(e) =>
+                          handleGradeThresholdChange({ labelD: e.target.value })
+                        }
+                        placeholder="Maqbul (Cukup)"
+                        className="w-full h-8 px-2.5 bg-white border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  {/* GRADE E (Auto < minD) */}
+                  <div className="p-3 rounded-xl bg-white border border-rose-200 shadow-2xs space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 font-black text-xs">
+                        GRADE E
+                      </span>
+                      <span className="text-[11px] font-bold text-rose-700 tabular-nums">
+                        &lt; {instForm.gradeThresholds.minD}
+                      </span>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                        Rentang Nilai (&lt; D)
+                      </label>
+                      <div className="w-full h-8 px-2.5 bg-rose-50/50 border border-rose-200 rounded-lg font-bold text-center text-rose-800 flex items-center justify-center tabular-nums">
+                        0 – {Math.max(0, instForm.gradeThresholds.minD - 1)}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                        Label Predikat E
+                      </label>
+                      <input
+                        type="text"
+                        value={instForm.gradeThresholds.labelE}
+                        onChange={(e) =>
+                          handleGradeThresholdChange({ labelE: e.target.value })
+                        }
+                        placeholder="Rasib (Kurang)"
+                        className="w-full h-8 px-2.5 bg-white border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-800"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

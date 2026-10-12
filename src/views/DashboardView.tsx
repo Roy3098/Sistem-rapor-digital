@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { getRadiusClass } from '../utils/theme';
+import { getRadiusClass, resolveGradeThresholds } from '../utils/theme';
 import {
   Users,
   Award,
@@ -57,6 +57,11 @@ export const DashboardView: React.FC = () => {
     });
   }, [grades, selectedClassId, selectedSemester]);
 
+  const activeThresholds = useMemo(
+    () => resolveGradeThresholds(siteSettings.gradeThresholds),
+    [siteSettings.gradeThresholds]
+  );
+
   // General Statistics
   const stats = useMemo(() => {
     const totalStudents = selectedClassId
@@ -68,19 +73,36 @@ export const DashboardView: React.FC = () => {
     const totalScoreSum = filteredGrades.reduce((sum, g) => sum + g.score, 0);
     const overallAverage = totalGradesCount > 0 ? (totalScoreSum / totalGradesCount).toFixed(1) : '0.0';
 
-    const excellentCount = filteredGrades.filter((g) => g.score >= 80).length;
-    const goodCount = filteredGrades.filter((g) => g.score >= 60 && g.score < 80).length;
-    const needsImprovementCount = filteredGrades.filter((g) => g.score < 60).length;
+    const gradeACount = filteredGrades.filter((g) => g.score >= activeThresholds.minA).length;
+    const gradeBCount = filteredGrades.filter(
+      (g) => g.score >= activeThresholds.minB && g.score < activeThresholds.minA
+    ).length;
+    const gradeCCount = filteredGrades.filter(
+      (g) => g.score >= activeThresholds.minC && g.score < activeThresholds.minB
+    ).length;
+    const gradeDCount = filteredGrades.filter(
+      (g) => g.score >= activeThresholds.minD && g.score < activeThresholds.minC
+    ).length;
+    const gradeECount = filteredGrades.filter((g) => g.score < activeThresholds.minD).length;
+
+    const excellentCount = gradeACount + gradeBCount;
+    const goodCount = gradeCCount + gradeDCount;
+    const needsImprovementCount = gradeECount;
 
     return {
       totalStudents,
       totalGradesCount,
       overallAverage,
+      gradeACount,
+      gradeBCount,
+      gradeCCount,
+      gradeDCount,
+      gradeECount,
       excellentCount,
       goodCount,
       needsImprovementCount,
     };
-  }, [students, filteredGrades, selectedClassId]);
+  }, [students, filteredGrades, selectedClassId, activeThresholds]);
 
   // Top performers per class
   const topGradesByClass = useMemo(() => {
@@ -1327,74 +1349,87 @@ export const DashboardView: React.FC = () => {
               <h2 className="text-base font-bold text-slate-900">Distribusi Prestasi</h2>
             </div>
 
-            <div className="space-y-3">
-              <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-100">
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="font-semibold text-emerald-900">Sangat Baik (80 - 90)</span>
-                  <span className="font-bold text-emerald-700 tabular-nums">
-                    {stats.excellentCount} nilai
-                  </span>
+            <div className="space-y-2.5">
+              {[
+                {
+                  letter: 'Grade A',
+                  range: `${activeThresholds.minA} - 90`,
+                  count: stats.gradeACount,
+                  bg: 'bg-emerald-50/60 border-emerald-100',
+                  text: 'text-emerald-900',
+                  numText: 'text-emerald-700',
+                  track: 'bg-emerald-200/50',
+                  bar: 'bg-emerald-600',
+                },
+                {
+                  letter: 'Grade B',
+                  range: `${activeThresholds.minB} - ${Math.max(activeThresholds.minB, activeThresholds.minA - 1)}`,
+                  count: stats.gradeBCount,
+                  bg: 'bg-sky-50/60 border-sky-100',
+                  text: 'text-sky-900',
+                  numText: 'text-sky-700',
+                  track: 'bg-sky-200/50',
+                  bar: 'bg-sky-600',
+                },
+                {
+                  letter: 'Grade C',
+                  range: `${activeThresholds.minC} - ${Math.max(activeThresholds.minC, activeThresholds.minB - 1)}`,
+                  count: stats.gradeCCount,
+                  bg: 'bg-amber-50/60 border-amber-100',
+                  text: 'text-amber-900',
+                  numText: 'text-amber-700',
+                  track: 'bg-amber-200/50',
+                  bar: 'bg-amber-600',
+                },
+                {
+                  letter: 'Grade D',
+                  range: `${activeThresholds.minD} - ${Math.max(activeThresholds.minD, activeThresholds.minC - 1)}`,
+                  count: stats.gradeDCount,
+                  bg: 'bg-orange-50/60 border-orange-100',
+                  text: 'text-orange-900',
+                  numText: 'text-orange-700',
+                  track: 'bg-orange-200/50',
+                  bar: 'bg-orange-600',
+                },
+                {
+                  letter: 'Grade E',
+                  range: `< ${activeThresholds.minD}`,
+                  count: stats.gradeECount,
+                  bg: 'bg-rose-50/60 border-rose-100',
+                  text: 'text-rose-900',
+                  numText: 'text-rose-700',
+                  track: 'bg-rose-200/50',
+                  bar: 'bg-rose-600',
+                },
+              ].map((gItem) => (
+                <div key={gItem.letter} className={`p-2.5 rounded-xl border ${gItem.bg}`}>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className={`font-semibold ${gItem.text}`}>
+                      {gItem.letter} ({gItem.range})
+                    </span>
+                    <span className={`font-bold ${gItem.numText} tabular-nums`}>
+                      {gItem.count} nilai
+                    </span>
+                  </div>
+                  <div className={`w-full ${gItem.track} rounded-full h-1.5 overflow-hidden`}>
+                    <div
+                      className={`${gItem.bar} h-1.5 rounded-full transition-all`}
+                      style={{
+                        width: `${
+                          stats.totalGradesCount > 0
+                            ? (gItem.count / stats.totalGradesCount) * 100
+                            : 0
+                        }%`,
+                      }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-emerald-200/50 rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className="bg-emerald-600 h-1.5 rounded-full transition-all"
-                    style={{
-                      width: `${
-                        stats.totalGradesCount > 0
-                          ? (stats.excellentCount / stats.totalGradesCount) * 100
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-100">
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="font-semibold text-amber-900">Baik (60 - 79)</span>
-                  <span className="font-bold text-amber-700 tabular-nums">
-                    {stats.goodCount} nilai
-                  </span>
-                </div>
-                <div className="w-full bg-amber-200/50 rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className="bg-amber-600 h-1.5 rounded-full transition-all"
-                    style={{
-                      width: `${
-                        stats.totalGradesCount > 0
-                          ? (stats.goodCount / stats.totalGradesCount) * 100
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-rose-50/60 border border-rose-100">
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="font-semibold text-rose-900">Perlu Perbaikan (0 - 59)</span>
-                  <span className="font-bold text-rose-700 tabular-nums">
-                    {stats.needsImprovementCount} nilai
-                  </span>
-                </div>
-                <div className="w-full bg-rose-200/50 rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className="bg-rose-600 h-1.5 rounded-full transition-all"
-                    style={{
-                      width: `${
-                        stats.totalGradesCount > 0
-                          ? (stats.needsImprovementCount / stats.totalGradesCount) * 100
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </div>
-              </div>
+              ))}
             </div>
           </div>
 
           <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-500 text-center">
-            Berdasarkan skala penilaian rapor {siteSettings.schoolName} (KKM: {siteSettings.kkmDefault ?? 70}, Mumtaz: &ge; 86).
+            Skala Grade Aktif: A (&ge;{activeThresholds.minA}), B (&ge;{activeThresholds.minB}), C (&ge;{activeThresholds.minC}), D (&ge;{activeThresholds.minD}) · KKM: {siteSettings.kkmDefault ?? 70}
           </div>
         </div>
       </div>
