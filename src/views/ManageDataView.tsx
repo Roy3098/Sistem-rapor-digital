@@ -12,6 +12,8 @@ import {
   ThemeBorderRadius,
   AnnouncementItem,
   GradeThresholds,
+  HeroBannerStyle,
+  StatsCardStyle,
 } from '../types';
 import {
   THEME_PALETTES,
@@ -21,6 +23,12 @@ import {
   compressImageFileToDataUrl,
   DEFAULT_GRADE_THRESHOLDS,
   resolveGradeThresholds,
+  HERO_STYLES_CATALOG,
+  getHeroStyleMeta,
+  HeroStyleCategory,
+  STATS_STYLES_CATALOG,
+  getStatsStyleMeta,
+  StatsStyleCategory,
 } from '../utils/theme';
 import { OfficialKopSurat } from '../components/BrandLogoIcon';
 import { PdfSettingsModal, PdfSettingsTabId } from '../components/PdfSettingsModal';
@@ -147,6 +155,8 @@ export const ManageDataView: React.FC = () => {
   const [webStyleSubTab, setWebStyleSubTab] = useState<
     'all' | '1a' | '1b' | '1c' | '1d' | '1e' | '1f' | '1g' | '1h'
   >('all');
+  const [heroAdminCatFilter, setHeroAdminCatFilter] = useState<'all' | HeroStyleCategory>('all');
+  const [statsAdminCatFilter, setStatsAdminCatFilter] = useState<'all' | StatsStyleCategory>('all');
   const [isPdfSettingsOpen, setIsPdfSettingsOpen] = useState(false);
   const [pdfSettingsInitialTab, setPdfSettingsInitialTab] =
     useState<PdfSettingsTabId>('kop_logos');
@@ -2278,171 +2288,519 @@ export const ManageDataView: React.FC = () => {
               {/* =============================================================== */}
               {/* 1F. GAYA BANNER SAMBUTAN (HERO) & STATISTIK DASHBOARD           */}
               {/* =============================================================== */}
-              {(webStyleSubTab === 'all' || webStyleSubTab === '1f') && (
-                <div className="p-4 sm:p-5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-4">
-                  <div>
-                    <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 uppercase tracking-wide flex items-center gap-2">
-                      <Sparkles className={`w-4 h-4 ${themeClasses.primaryText}`} />
-                      <span>1F. Gaya Visual Banner Sambutan (Hero) & Statistik Dashboard (20 Hero + 16 Metrik)</span>
-                    </h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Pilihan desain terlengkap: 20 gaya visual hero banner (Islami, Eksklusif, Kaca, Modern, Futuristik, Kaligrafi, Galaksi) dan 16 gaya kartu statistik metrik dashboard.
-                    </p>
-                  </div>
+              {(webStyleSubTab === 'all' || webStyleSubTab === '1f') && (() => {
+                const activeHeroId = (themeSettings.heroBannerStyle || 'gradient_brand') as HeroBannerStyle;
+                const activeHeroMeta = getHeroStyleMeta(activeHeroId);
+                const currentHeroIndex = HERO_STYLES_CATALOG.findIndex((h) => h.id === activeHeroId);
+                const filteredHeroCatalog =
+                  heroAdminCatFilter === 'all'
+                    ? HERO_STYLES_CATALOG
+                    : HERO_STYLES_CATALOG.filter((h) => h.category === heroAdminCatFilter);
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                    {/* Hero Banner Style Selector (20 Choices) */}
-                    <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-                      <label className="font-bold text-slate-900 text-xs block mb-1.5 flex items-center justify-between">
-                        <span>Desain Visual Hero Banner</span>
-                        <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
-                          20 Pilihan
+                const activeStatsId = (themeSettings.statsCardStyle || 'modern_elevated') as StatsCardStyle;
+                const activeStatsMeta = getStatsStyleMeta(activeStatsId);
+                const currentStatsIndex = STATS_STYLES_CATALOG.findIndex((s) => s.id === activeStatsId);
+                const filteredStatsCatalog =
+                  statsAdminCatFilter === 'all'
+                    ? STATS_STYLES_CATALOG
+                    : STATS_STYLES_CATALOG.filter((s) => s.category === statsAdminCatFilter);
+
+                const cycleHeroStyle = (dir: -1 | 1) => {
+                  const total = HERO_STYLES_CATALOG.length;
+                  const nextIdx = (currentHeroIndex + dir + total) % total;
+                  handleThemePatch({ heroBannerStyle: HERO_STYLES_CATALOG[nextIdx].id });
+                };
+
+                const cycleStatsStyle = (dir: -1 | 1) => {
+                  const total = STATS_STYLES_CATALOG.length;
+                  const nextIdx = (currentStatsIndex + dir + total) % total;
+                  handleThemePatch({ statsCardStyle: STATS_STYLES_CATALOG[nextIdx].id });
+                };
+
+                return (
+                  <div className="p-3.5 sm:p-5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div>
+                        <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                          <Sparkles className={`w-4 h-4 ${themeClasses.primaryText}`} />
+                          <span>1F. Gaya Visual Banner Sambutan (Hero) & Statistik Dashboard</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Sentuh kartu pratinjau di bawah untuk mengganti desain Hero ({HERO_STYLES_CATALOG.length} Tema) dan Kartu Statistik ({STATS_STYLES_CATALOG.length} Tema) secara langsung di HP maupun Laptop.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => cycleHeroStyle(-1)}
+                          className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-[11px] font-bold text-slate-700 shadow-2xs transition-colors cursor-pointer active:scale-95"
+                          title="Gaya Hero Sebelumnya"
+                        >
+                          ← Hero
+                        </button>
+                        <span className="text-[11px] font-extrabold text-slate-600 px-1 tabular-nums">
+                          {currentHeroIndex + 1}/{HERO_STYLES_CATALOG.length}
                         </span>
-                      </label>
-                      <select
-                        value={themeSettings.heroBannerStyle || 'gradient_brand'}
-                        onChange={(e) =>
-                          handleThemePatch({ heroBannerStyle: e.target.value as any })
-                        }
-                        className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
-                      >
-                        <option value="gradient_brand">Gradasi Warna Tema (Standar Default)</option>
-                        <option value="royal_emerald">Zamrud Eksklusif Berornamen Emas (Mewah & Khidmat)</option>
-                        <option value="islamic_calligraphy">Kaligrafi Arabesque Pesantren (Nilai Tradisi Luhur)</option>
-                        <option value="islamic_arch">Kubah Mihrab Islami Geometris</option>
-                        <option value="dark_elegant">Gelap Elegan Eksklusif (Slate Premium)</option>
-                        <option value="light_clean">Terang Bersih Minimalis</option>
-                        <option value="glass_modern">Kaca Modern (Glass Panel Transparan)</option>
-                        <option value="split_accent">Putih Garis Aksen Samping (Clean Border)</option>
-                        <option value="pastel_mint">Mint Sejuk Pesantren (Adem & Lembut)</option>
-                        <option value="cosmic_galaxy">Galaksi Midnight Violet (Spektakuler)</option>
-                        <option value="aurora_mesh">Aurora Cahaya Spektrum Multi-Warna</option>
-                        <option value="geometric_mosaic">Mosaik Geometri Emas & Slate</option>
-                        <option value="vintage_parchment">Naskah Kuno Pergamena Emas (Klasik Serif)</option>
-                        <option value="ocean_breeze">Gradasi Laut Teduh Azure & Tosika</option>
-                        <option value="crimson_luxury">Marun Beludru & Mawar Emas (Karismatik)</option>
-                        <option value="cyber_academic">Neon High-Tech Cyber Academic</option>
-                        <option value="editorial_card">Gaya Kartu Editorial Serif Presisi</option>
-                        <option value="compact_ribbon">Pita Horisontal Ringkas & Rapi</option>
-                        <option value="sunset_warmth">Hangat Lembayung Sore Oranye-Cokelat</option>
-                        <option value="modern_stacked">Dua Nada Diagonal Modern Bertingkat</option>
-                      </select>
+                        <button
+                          type="button"
+                          onClick={() => cycleHeroStyle(1)}
+                          className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-[11px] font-bold text-slate-700 shadow-2xs transition-colors cursor-pointer active:scale-95"
+                          title="Gaya Hero Berikutnya"
+                        >
+                          Hero →
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Stats Card Style Selector (16 Choices) */}
-                    <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-                      <label className="font-bold text-slate-900 text-xs block mb-1.5 flex items-center justify-between">
-                        <span>Gaya Kartu Statistik Metrik</span>
-                        <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
-                          16 Pilihan
-                        </span>
-                      </label>
-                      <select
-                        value={themeSettings.statsCardStyle || 'modern_elevated'}
-                        onChange={(e) =>
-                          handleThemePatch({ statsCardStyle: e.target.value as any })
-                        }
-                        className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
-                      >
-                        <option value="modern_elevated">Modern Elevated (Kartu Bersih Bayangan Halus)</option>
-                        <option value="floating_card_3d">3D Floating Card (Mengambang Mewah Pita Atas)</option>
-                        <option value="glass_glow">Kaca Transparan Glow (Blur Halus Garis Atas)</option>
-                        <option value="split_metric">Split Duotone Header (Kepala Berwarna + Nilai)</option>
-                        <option value="dark_oled_glow">Dark OLED Neon Glow (Hitam Pekat Lampu Neon)</option>
-                        <option value="minimal_bordered">Minimal Bordered (Garis Tepi Bersih Aksen Kiri)</option>
-                        <option value="kpi_target_gauge">KPI Target & Gauge (Meteran Progres & Persen)</option>
-                        <option value="bento_compact">Bento Box Grid (Desain Grid Kompak Modern)</option>
-                        <option value="neo_brutalist">Neo-Brutalist 3D (Border Tebal & Bayangan Retro)</option>
-                        <option value="gradient_accent">Soft Gradient Accent (Gradasi Warna Tema Lembut)</option>
-                        <option value="soft_neumorphic">Soft Neumorphic (Embossed Masuk/Keluar Halus)</option>
-                        <option value="ribbon_badge">Ribbon Corner Badge (Pita Badge Sudut Menyilang)</option>
-                        <option value="accent_bottom_wave">Accent Bottom Bar (Garis Aksen Bawah Berwarna)</option>
-                        <option value="pill_duotone">Pill Duotone Capsule (Kapsul Melengkung Dua Warna)</option>
-                        <option value="compact_bar">Compact Bar Line (Baris Horisontal Hemat Ruang)</option>
-                        <option value="circular_badge">Circular Badge Accent (Ikon Melingkar Besar)</option>
-                      </select>
+                    {/* Live Mobile-First Mini Hero Preview Banner */}
+                    <div
+                      className="relative overflow-hidden rounded-xl p-3.5 sm:p-4 shadow-md transition-all duration-300"
+                      style={{
+                        background:
+                          activeHeroId === 'gradient_brand'
+                            ? `linear-gradient(135deg, ${THEME_PALETTES[themeSettings.colorTheme]?.hexPrimary || '#059669'} 0%, ${THEME_PALETTES[themeSettings.colorTheme]?.hexSecondary || '#14b8a6'} 100%)`
+                            : activeHeroMeta.previewBg,
+                        border: `1.5px solid ${activeHeroMeta.previewBorder}`,
+                      }}
+                    >
+                      <div
+                        className="pointer-events-none absolute -top-10 -right-10 w-32 h-32 rounded-full blur-2xl opacity-35"
+                        style={{ backgroundColor: activeHeroMeta.previewAccent }}
+                      />
+                      <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                            <span
+                              className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md"
+                              style={{
+                                backgroundColor: activeHeroMeta.isLight
+                                  ? 'rgba(15,23,42,0.08)'
+                                  : 'rgba(255,255,255,0.16)',
+                                color: activeHeroMeta.previewText,
+                              }}
+                            >
+                              <Sparkles className="w-2.5 h-2.5" />
+                              Gaya Hero Aktif: {activeHeroMeta.name}
+                            </span>
+                            <span
+                              className="text-[10px] font-semibold opacity-80"
+                              style={{ color: activeHeroMeta.previewText }}
+                            >
+                              · {activeHeroMeta.badge}
+                            </span>
+                          </div>
+                          <p
+                            className="text-sm sm:text-base font-extrabold tracking-tight truncate"
+                            style={{ color: activeHeroMeta.previewText }}
+                          >
+                            {siteSettings.schoolName || 'Pondok Pesantren Darul Huda'}
+                          </p>
+                          <p
+                            className="text-[11px] opacity-85 line-clamp-1 mt-0.5"
+                            style={{ color: activeHeroMeta.previewText }}
+                          >
+                            {activeHeroMeta.description}
+                          </p>
+                        </div>
+
+                        {/* Quick Height Segmented Picker inside Live Preview */}
+                        <div className="flex items-center gap-1 bg-black/20 backdrop-blur-md p-1 rounded-lg self-start sm:self-center shrink-0">
+                          {(
+                            [
+                              { id: 'compact', label: 'Ringkas' },
+                              { id: 'standard', label: 'Standar' },
+                              { id: 'spacious', label: 'Megah' },
+                            ] as const
+                          ).map((hOpt) => {
+                            const isSelected = (themeSettings.heroBannerHeight || 'standard') === hOpt.id;
+                            return (
+                              <button
+                                key={hOpt.id}
+                                type="button"
+                                onClick={() => handleThemePatch({ heroBannerHeight: hOpt.id })}
+                                className={`px-2.5 py-1 rounded-md text-[10px] font-extrabold transition-all cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-white text-slate-900 shadow-xs'
+                                    : 'text-white/85 hover:text-white hover:bg-white/10'
+                                }`}
+                              >
+                                {hOpt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
 
-                    {/* Banner Height */}
-                    <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-                      <label className="font-bold text-slate-900 text-xs block mb-1.5">
-                        Ukuran Tinggi Hero Banner
+                    {/* Visual Hero Style Swatch Grid with Mobile-Friendly Category Tabs */}
+                    <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <label className="font-extrabold text-slate-900 text-xs flex items-center gap-2">
+                          <Palette className={`w-3.5 h-3.5 ${themeClasses.primaryText}`} />
+                          <span>Galeri Pemilih Gaya Hero ({HERO_STYLES_CATALOG.length} Tema)</span>
+                        </label>
+
+                        {/* Scrollable Category Pills on Mobile */}
+                        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5 -mx-1 px-1">
+                          {(
+                            [
+                              { id: 'all', label: `Semua (${HERO_STYLES_CATALOG.length})` },
+                              { id: 'islami', label: 'Islami & Klasik' },
+                              { id: 'modern', label: 'Modern & Kaca' },
+                              { id: 'spektakuler', label: 'Spektakuler' },
+                              { id: 'terang', label: 'Terang & Bersih' },
+                            ] as const
+                          ).map((cat) => {
+                            const active = heroAdminCatFilter === cat.id;
+                            return (
+                              <button
+                                key={cat.id}
+                                type="button"
+                                onClick={() => setHeroAdminCatFilter(cat.id)}
+                                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                                  active
+                                    ? `${themeClasses.primary} text-white shadow-xs`
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+                                }`}
+                              >
+                                {cat.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* 2-Column Mobile / 4-Column Desktop Swatch Cards */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-2.5 max-h-[380px] sm:max-h-[420px] overflow-y-auto pr-0.5">
+                        {filteredHeroCatalog.map((styleItem) => {
+                          const isSelected = activeHeroId === styleItem.id;
+                          const swatchBg =
+                            styleItem.id === 'gradient_brand'
+                              ? `linear-gradient(135deg, ${THEME_PALETTES[themeSettings.colorTheme]?.hexPrimary || '#059669'} 0%, ${THEME_PALETTES[themeSettings.colorTheme]?.hexSecondary || '#14b8a6'} 100%)`
+                              : styleItem.previewBg;
+
+                          return (
+                            <button
+                              key={styleItem.id}
+                              type="button"
+                              onClick={() => handleThemePatch({ heroBannerStyle: styleItem.id })}
+                              className={`group relative flex flex-col text-left rounded-xl p-1.5 transition-all cursor-pointer border ${
+                                isSelected
+                                  ? 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-500/20 shadow-sm'
+                                  : 'border-slate-200/90 bg-white hover:border-slate-300 hover:shadow-xs active:scale-[0.98]'
+                              }`}
+                            >
+                              <div
+                                className="relative w-full h-14 sm:h-16 rounded-lg overflow-hidden p-2 flex flex-col justify-between"
+                                style={{
+                                  background: swatchBg,
+                                  border: `1px solid ${styleItem.previewBorder}`,
+                                }}
+                              >
+                                <div
+                                  className="pointer-events-none absolute -right-3 -bottom-3 w-12 h-12 rounded-full opacity-35 blur-md"
+                                  style={{ backgroundColor: styleItem.previewAccent }}
+                                />
+                                <div className="relative z-10 flex items-center justify-between gap-1">
+                                  <span
+                                    className="text-[8px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded truncate max-w-[80%]"
+                                    style={{
+                                      backgroundColor: styleItem.isLight
+                                        ? 'rgba(15,23,42,0.08)'
+                                        : 'rgba(255,255,255,0.16)',
+                                      color: styleItem.previewText,
+                                    }}
+                                  >
+                                    {styleItem.badge}
+                                  </span>
+                                  {isSelected && (
+                                    <span className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                                      <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="relative z-10 space-y-1">
+                                  <div
+                                    className="h-1.5 w-3/4 rounded-full opacity-90"
+                                    style={{ backgroundColor: styleItem.previewText }}
+                                  />
+                                  <div
+                                    className="h-1 w-1/2 rounded-full opacity-55"
+                                    style={{ backgroundColor: styleItem.previewAccent }}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="pt-1.5 px-1 pb-0.5">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="text-[11px] font-extrabold text-slate-900 truncate">
+                                    {styleItem.shortName}
+                                  </span>
+                                </div>
+                                <p className="text-[9.5px] text-slate-500 line-clamp-1 mt-0.5">
+                                  {styleItem.description}
+                                </p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Visual Statistik Card Style Swatch Grid (30 Themes) */}
+                    <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <label className="font-extrabold text-slate-900 text-xs flex items-center gap-2">
+                            <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>Galeri Pemilih Gaya Kartu Statistik ({STATS_STYLES_CATALOG.length} Tema)</span>
+                          </label>
+                          <div className="hidden sm:flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => cycleStatsStyle(-1)}
+                              className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-bold text-slate-700 cursor-pointer"
+                            >
+                              ←
+                            </button>
+                            <span className="text-[10px] font-bold text-slate-500 tabular-nums">
+                              {currentStatsIndex + 1}/{STATS_STYLES_CATALOG.length}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => cycleStatsStyle(1)}
+                              className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-bold text-slate-700 cursor-pointer"
+                            >
+                              →
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Scrollable Category Pills for Statistik */}
+                        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5 -mx-1 px-1">
+                          {(
+                            [
+                              { id: 'all', label: `Semua (${STATS_STYLES_CATALOG.length})` },
+                              { id: 'modern', label: 'Modern & Bersih' },
+                              { id: 'islami', label: 'Islami & Klasik' },
+                              { id: 'analitik', label: 'Analitik & Grafik' },
+                              { id: 'artistik', label: 'Artistik & 3D' },
+                            ] as const
+                          ).map((cat) => {
+                            const active = statsAdminCatFilter === cat.id;
+                            return (
+                              <button
+                                key={cat.id}
+                                type="button"
+                                onClick={() => setStatsAdminCatFilter(cat.id)}
+                                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                                  active
+                                    ? 'bg-indigo-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+                                }`}
+                              >
+                                {cat.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-2.5 max-h-[360px] overflow-y-auto pr-0.5">
+                        {filteredStatsCatalog.map((statItem) => {
+                          const isSelected = activeStatsId === statItem.id;
+                          return (
+                            <button
+                              key={statItem.id}
+                              type="button"
+                              onClick={() => handleThemePatch({ statsCardStyle: statItem.id })}
+                              className={`group relative flex flex-col text-left rounded-xl p-1.5 transition-all cursor-pointer border ${
+                                isSelected
+                                  ? 'border-indigo-500 bg-indigo-50/50 ring-2 ring-indigo-500/20 shadow-sm'
+                                  : 'border-slate-200/90 bg-white hover:border-slate-300 hover:shadow-xs active:scale-[0.98]'
+                              }`}
+                            >
+                              <div
+                                className="relative w-full h-14 sm:h-16 rounded-lg overflow-hidden p-2 flex flex-col justify-between"
+                                style={{
+                                  background: statItem.previewBg,
+                                  border: `1px solid ${statItem.previewBorder}`,
+                                }}
+                              >
+                                <div className="relative z-10 flex items-center justify-between gap-1">
+                                  <span
+                                    className="text-[8px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded truncate max-w-[78%]"
+                                    style={{
+                                      backgroundColor: statItem.isLight
+                                        ? 'rgba(15,23,42,0.08)'
+                                        : 'rgba(255,255,255,0.16)',
+                                      color: statItem.previewText,
+                                    }}
+                                  >
+                                    {statItem.badge}
+                                  </span>
+                                  {isSelected && (
+                                    <span className="w-4 h-4 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                                      <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="relative z-10 flex items-baseline justify-between gap-1">
+                                  <span
+                                    className="text-xs font-black tabular-nums leading-none"
+                                    style={{ color: statItem.previewText }}
+                                  >
+                                    128 Santri
+                                  </span>
+                                  <span
+                                    className="inline-block w-5 h-1.5 rounded-full"
+                                    style={{ backgroundColor: statItem.previewAccent }}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="pt-1.5 px-1 pb-0.5">
+                                <span className="text-[11px] font-extrabold text-slate-900 truncate block">
+                                  {statItem.shortName}
+                                </span>
+                                <p className="text-[9.5px] text-slate-500 line-clamp-1 mt-0.5">
+                                  {statItem.description}
+                                </p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                      {/* Hero Banner Style Selector (Dropdown fallback) */}
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                        <label className="font-bold text-slate-900 text-xs block mb-1.5 flex items-center justify-between">
+                          <span>Daftar Cepat Gaya Hero</span>
+                          <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                            {HERO_STYLES_CATALOG.length} Pilihan
+                          </span>
+                        </label>
+                        <select
+                          value={themeSettings.heroBannerStyle || 'gradient_brand'}
+                          onChange={(e) =>
+                            handleThemePatch({ heroBannerStyle: e.target.value as any })
+                          }
+                          className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
+                        >
+                          {HERO_STYLES_CATALOG.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name} — {item.badge}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Stats Card Style Selector (30 Choices) */}
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                        <label className="font-bold text-slate-900 text-xs block mb-1.5 flex items-center justify-between">
+                          <span>Daftar Cepat Gaya Statistik</span>
+                          <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                            {STATS_STYLES_CATALOG.length} Pilihan
+                          </span>
+                        </label>
+                        <select
+                          value={themeSettings.statsCardStyle || 'modern_elevated'}
+                          onChange={(e) =>
+                            handleThemePatch({ statsCardStyle: e.target.value as any })
+                          }
+                          className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
+                        >
+                          {STATS_STYLES_CATALOG.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name} — {item.badge}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Banner Height */}
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                        <label className="font-bold text-slate-900 text-xs block mb-1.5">
+                          Ukuran Tinggi Hero Banner
+                        </label>
+                        <select
+                          value={themeSettings.heroBannerHeight || 'standard'}
+                          onChange={(e) =>
+                            handleThemePatch({ heroBannerHeight: e.target.value as any })
+                          }
+                          className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
+                        >
+                          <option value="compact">Ringkas & Ramping (Compact)</option>
+                          <option value="standard">Standar Proporsional</option>
+                          <option value="spacious">Besar & Megah (Spacious)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Toggle Checkboxes */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                      <label className="bg-white p-3.5 rounded-xl border border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-50">
+                        <div>
+                          <span className="font-bold text-slate-900 text-xs block">
+                            Tampilkan Hero Banner
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            Banner sambutan utama di atas Dashboard
+                          </span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={themeSettings.showHeroBanner !== false}
+                          onChange={(e) =>
+                            handleThemePatch({ showHeroBanner: e.target.checked })
+                          }
+                          className="w-4 h-4 rounded border-slate-300 text-slate-900 cursor-pointer"
+                        />
                       </label>
-                      <select
-                        value={themeSettings.heroBannerHeight || 'standard'}
-                        onChange={(e) =>
-                          handleThemePatch({ heroBannerHeight: e.target.value as any })
-                        }
-                        className="w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
-                      >
-                        <option value="compact">Ringkas & Ramping (Compact)</option>
-                        <option value="standard">Standar Proporsional</option>
-                        <option value="spacious">Besar & Megah (Spacious)</option>
-                      </select>
+
+                      <label className="bg-white p-3.5 rounded-xl border border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-50">
+                        <div>
+                          <span className="font-bold text-slate-900 text-xs block">
+                            Kotak Ringkasan di Hero
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            Info Tahun Ajaran, Kelas & Status KKM
+                          </span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={themeSettings.showHeroStats !== false}
+                          onChange={(e) =>
+                            handleThemePatch({ showHeroStats: e.target.checked })
+                          }
+                          className="w-4 h-4 rounded border-slate-300 text-slate-900 cursor-pointer"
+                        />
+                      </label>
+
+                      <label className="bg-white p-3.5 rounded-xl border border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-50">
+                        <div>
+                          <span className="font-bold text-slate-900 text-xs block">
+                            Badge Tren di Kartu Statistik
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            Pill info tambahan di samping angka metrik
+                          </span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={themeSettings.showStatTrends !== false}
+                          onChange={(e) =>
+                            handleThemePatch({ showStatTrends: e.target.checked })
+                          }
+                          className="w-4 h-4 rounded border-slate-300 text-slate-900 cursor-pointer"
+                        />
+                      </label>
                     </div>
                   </div>
-
-                  {/* Toggle Checkboxes */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                    <label className="bg-white p-3.5 rounded-xl border border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-50">
-                      <div>
-                        <span className="font-bold text-slate-900 text-xs block">
-                          Tampilkan Hero Banner
-                        </span>
-                        <span className="text-[10px] text-slate-500">
-                          Banner sambutan utama di atas Dashboard
-                        </span>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={themeSettings.showHeroBanner !== false}
-                        onChange={(e) =>
-                          handleThemePatch({ showHeroBanner: e.target.checked })
-                        }
-                        className="w-4 h-4 rounded border-slate-300 text-slate-900 cursor-pointer"
-                      />
-                    </label>
-
-                    <label className="bg-white p-3.5 rounded-xl border border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-50">
-                      <div>
-                        <span className="font-bold text-slate-900 text-xs block">
-                          Kotak Ringkasan di Hero
-                        </span>
-                        <span className="text-[10px] text-slate-500">
-                          Info Tahun Ajaran, Kelas & Status KKM
-                        </span>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={themeSettings.showHeroStats !== false}
-                        onChange={(e) =>
-                          handleThemePatch({ showHeroStats: e.target.checked })
-                        }
-                        className="w-4 h-4 rounded border-slate-300 text-slate-900 cursor-pointer"
-                      />
-                    </label>
-
-                    <label className="bg-white p-3.5 rounded-xl border border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-50">
-                      <div>
-                        <span className="font-bold text-slate-900 text-xs block">
-                          Badge Tren di Kartu Statistik
-                        </span>
-                        <span className="text-[10px] text-slate-500">
-                          Pill info tambahan di samping angka metrik
-                        </span>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={themeSettings.showStatTrends !== false}
-                        onChange={(e) =>
-                          handleThemePatch({ showStatTrends: e.target.checked })
-                        }
-                        className="w-4 h-4 rounded border-slate-300 text-slate-900 cursor-pointer"
-                      />
-                    </label>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* =============================================================== */}
               {/* 1G. TIPOGRAFI, FONT JUDUL, SKALA TEKS & SPASI BARIS             */}

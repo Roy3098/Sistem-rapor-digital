@@ -63,7 +63,23 @@ export type HeroBannerStyle =
   | 'cosmic_galaxy'
   | 'vintage_parchment'
   | 'ocean_breeze'
-  | 'crimson_luxury';
+  | 'crimson_luxury'
+  | 'nabawi_medina'
+  | 'kaaba_kiswah'
+  | 'andalusia_alhambra'
+  | 'ottoman_iznik'
+  | 'moroccan_zellige'
+  | 'nusantara_batik'
+  | 'golden_minaret'
+  | 'nordic_frost'
+  | 'monochrome_swiss'
+  | 'velvet_sapphire'
+  | 'forest_canopy'
+  | 'holographic_pearl'
+  | 'lava_obsidian'
+  | 'royal_amethyst'
+  | 'ivory_gold_leaf'
+  | 'sakura_dawn';
 
 export type StatsCardStyle =
   | 'modern_elevated'
@@ -81,7 +97,21 @@ export type StatsCardStyle =
   | 'soft_neumorphic'
   | 'ribbon_badge'
   | 'accent_bottom_wave'
-  | 'pill_duotone';
+  | 'pill_duotone'
+  | 'islamic_mihrab'
+  | 'royal_gold_border'
+  | 'kiswah_dark_gold'
+  | 'turats_parchment'
+  | 'cyber_matrix'
+  | 'aurora_glass'
+  | 'editorial_serif'
+  | 'stacked_deck'
+  | 'watermark_icon'
+  | 'top_arch_crown'
+  | 'swiss_grid_mono'
+  | 'pastel_soft_tint'
+  | 'bold_solid_vivid'
+  | 'ticket_perforated';
 
 export interface ThemeSettings {
   colorTheme: ThemeColor;
