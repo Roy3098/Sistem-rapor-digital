@@ -243,8 +243,8 @@ export const DashboardView: React.FC = () => {
     <div className="space-y-6 pb-20">
       {/* Hero Welcome Banner */}
       {themeSettings.showHeroBanner !== false && (() => {
-        const bannerStyle = themeSettings.heroBannerStyle || 'gradient_brand';
-        const activeHeroMeta = getHeroStyleMeta(bannerStyle);
+        const bannerStyle = (themeSettings.heroBannerStyle || 'gradient_brand') as string;
+        const activeHeroMeta = getHeroStyleMeta(bannerStyle as any);
         const isLightBanner = !isDeviceDarkMode && activeHeroMeta.isLight;
 
         const bannerPadding =
@@ -1124,17 +1124,17 @@ export const DashboardView: React.FC = () => {
                                 className="absolute -right-3 -bottom-3 w-12 h-12 rounded-full opacity-25 pointer-events-none"
                                 style={{ backgroundColor: item.previewAccent }}
                               />
-                              {(item.id === 'islamic_calligraphy' || item.id === 'kaaba_gold_kiswah') && (
+                              {(item.id === 'islamic_calligraphy' || (item.id as string) === 'kaaba_gold_kiswah') && (
                                 <span className="absolute right-2 bottom-1 font-arabic text-lg text-amber-300/70 select-none pointer-events-none">
                                   ﷽
                                 </span>
                               )}
                               {(item.id === 'royal_emerald' ||
                                 item.id === 'geometric_mosaic' ||
-                                item.id === 'nabawi_green_dome') && (
+                                (item.id as string) === 'nabawi_green_dome') && (
                                 <Star className="absolute right-2 bottom-1.5 w-4 h-4 text-amber-300/60 pointer-events-none" />
                               )}
-                              {(item.id === 'cyber_academic' || item.id === 'neon_synth_grid') && (
+                              {(item.id === 'cyber_academic' || (item.id as string) === 'neon_synth_grid') && (
                                 <Cpu className="absolute right-2 bottom-1.5 w-4 h-4 text-cyan-300/60 pointer-events-none" />
                               )}
 
@@ -1463,7 +1463,7 @@ export const DashboardView: React.FC = () => {
 
       {/* Metrics Row (Rendered according to statsCardStyle: 8 Styles) */}
       {(() => {
-        const statsStyle = themeSettings.statsCardStyle || 'modern_elevated';
+        const statsStyle = (themeSettings.statsCardStyle || 'modern_elevated') as string;
         const showTrends = themeSettings.showStatTrends !== false;
 
         const metricItems = [

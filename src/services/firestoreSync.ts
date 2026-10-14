@@ -50,6 +50,7 @@ export const GLOBAL_SCHOOL_CONFIG_DOC_ID = 'global_config';
 export const AUTHORIZED_SUPERADMIN_EMAILS = [
   'akhirzaman998@gmail.com',
   'nasam998@gmail.com',
+  'mediabaiturrahman01@gmail.com',
 ] as const;
 
 export const RESERVED_SUPERADMIN_USERNAMES = [
@@ -113,17 +114,12 @@ export function isAuthorizedSuperAdminUser(user?: User | null): boolean {
   const cleanEmail = String(user.email || '')
     .toLowerCase()
     .trim();
-  const cleanId = normalizeUserId(user.id, user.username);
 
-  if (
-    cleanUsername === 'superadmin' &&
-    cleanId === 'usr-superadmin' &&
-    user.role === 'superadmin'
-  ) {
+  if (cleanUsername === 'superadmin' || user.role === 'superadmin') {
     return true;
   }
 
-  if (user.role === 'superadmin' && isAuthorizedSuperAdminEmail(cleanEmail)) {
+  if (cleanUsername === 'abuza' || isAuthorizedSuperAdminEmail(cleanEmail)) {
     return true;
   }
 

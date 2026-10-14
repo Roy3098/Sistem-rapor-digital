@@ -516,6 +516,7 @@ export interface StatsStyleMeta {
   previewAccent: string;
   previewText: string;
   isDark?: boolean;
+  isLight?: boolean;
 }
 
 export const STATS_STYLES_CATALOG: StatsStyleMeta[] = [
@@ -886,10 +887,13 @@ export const STATS_STYLES_CATALOG: StatsStyleMeta[] = [
 ];
 
 export function getStatsStyleMeta(style?: StatsCardStyle): StatsStyleMeta {
-  return (
+  const meta =
     STATS_STYLES_CATALOG.find((item) => item.id === (style || 'modern_elevated')) ||
-    STATS_STYLES_CATALOG[0]
-  );
+    STATS_STYLES_CATALOG[0];
+  return {
+    ...meta,
+    isLight: meta.isLight ?? !meta.isDark,
+  };
 }
 
 export interface ThemeClasses {

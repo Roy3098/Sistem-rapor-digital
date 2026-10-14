@@ -8,6 +8,7 @@ export const AuthView: React.FC = () => {
   const { login, loginWithGoogle, register, forgotPassword, themeClasses, siteSettings } = useApp();
 
   const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login');
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   // Form states
   const [username, setUsername] = useState('');

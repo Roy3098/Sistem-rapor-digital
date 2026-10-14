@@ -201,19 +201,21 @@ export const SUPERADMIN_USER: User = {
   joinedDate: '01/01/2024',
 };
 
-export const INITIAL_USER: User = {
+export const INITIAL_USER: User = SUPERADMIN_USER;
+
+export const ABUZA_USER: User = {
   id: 'usr-1',
   username: 'abuza',
   fullName: 'Muhammad Siroj',
   email: 'mediabaiturrahman01@gmail.com',
   avatarUrl: '/src/assets/images/avatar_muhammad_siroj_1791464103883.jpg',
-  role: 'guru',
+  role: 'superadmin',
   joinedDate: '14/07/2025',
 };
 
 export const INITIAL_USERS: User[] = [
   SUPERADMIN_USER,
-  INITIAL_USER,
+  ABUZA_USER,
   {
     id: 'usr-2',
     username: 'ridwan',

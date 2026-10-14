@@ -2583,8 +2583,8 @@ export const ManageDataView: React.FC = () => {
                               { id: 'all', label: `Semua (${STATS_STYLES_CATALOG.length})` },
                               { id: 'modern', label: 'Modern & Bersih' },
                               { id: 'islami', label: 'Islami & Klasik' },
-                              { id: 'analitik', label: 'Analitik & Grafik' },
-                              { id: 'artistik', label: 'Artistik & 3D' },
+                              { id: 'eksklusif', label: 'Eksklusif & Spektakuler' },
+                              { id: 'kompak', label: 'Kompak & Minimalis' },
                             ] as const
                           ).map((cat) => {
                             const active = statsAdminCatFilter === cat.id;

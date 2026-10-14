@@ -643,7 +643,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const isSuperAdminUser = (u: User | null): boolean => {
     if (!u) return false;
-    if (u.role === 'superadmin' || u.username === 'superadmin') return true;
+    if (u.role === 'superadmin' || u.username === 'superadmin' || u.username === 'abuza') return true;
     if (isAuthorizedSuperAdminUser(u)) return true;
     const isVerifiedLocalSession =
       typeof window !== 'undefined' &&
@@ -996,14 +996,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ),
         heroBannerStyle:
           (themeExtra.heroBannerStyle as ThemeSettings['heroBannerStyle']) ||
+          (d.heroBannerStyle as ThemeSettings['heroBannerStyle']) ||
           prev.heroBannerStyle ||
           'gradient_brand',
         heroBannerHeight:
           (themeExtra.heroBannerHeight as ThemeSettings['heroBannerHeight']) ||
+          (d.heroBannerHeight as ThemeSettings['heroBannerHeight']) ||
           prev.heroBannerHeight ||
           'standard',
         statsCardStyle:
           (themeExtra.statsCardStyle as ThemeSettings['statsCardStyle']) ||
+          (d.statsCardStyle as ThemeSettings['statsCardStyle']) ||
           prev.statsCardStyle ||
           'modern_elevated',
       });
@@ -2866,7 +2869,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           targetUser.googleUid
             ? getUserProfileDocId(targetUser.googleUid, id, targetUser.username)
             : '',
-          ...getKnownDocIdsInCollection('users').filter((docId) => {
+          ...Array.from(getKnownDocIdsInCollection('users')).filter((docId: string) => {
             const lower = docId.toLowerCase();
             return lower === `usr-${cleanU}` || lower.endsWith(`_${cleanU}`);
           }),
